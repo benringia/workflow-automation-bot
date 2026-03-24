@@ -27,17 +27,59 @@ let workflowResults = [];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderCodeBlocks(escaped) {
+    return escaped.replace(/```(\w*)?\n([\s\S]*?)```/g, (_, lang, code) =>
+        `<div class="code-block">` +
+        `<button class="toggle-btn">Show Code</button>` +
+        `<pre class="hidden"><code class="lang-${lang || ''}">${code}</code></pre>` +
+        `</div>`
+    );
+}
+
+function formatOutput(text) {
+    const lines = text.split('\n');
+    const sections = [];
+    let current = null;
+
+    for (const line of lines) {
+        const match = line.match(/^(#{1,2})\s+(.+)/);
+        if (match) {
+            if (current) sections.push(current);
+            current = { title: match[2], level: match[1].length, lines: [] };
+        } else {
+            if (!current) current = { title: null, lines: [] };
+            current.lines.push(line);
+        }
+    }
+    if (current) sections.push(current);
+
+    return sections.map(section => {
+        const content = renderCodeBlocks(escapeHtml(section.lines.join('\n')));
+        if (section.title) {
+            const tag = section.level === 1 ? 'h2' : 'h3';
+            return `<div class="output-section"><${tag}>${escapeHtml(section.title)}</${tag}><div>${content}</div></div>`;
+        }
+        return `<div class="output-section"><div>${content}</div></div>`;
+    }).join('');
+}
+
 // --- Typing engine ---
-let typingQueue   = '';
-let typingActive  = false;
-let typingAborted = false;
-let charsRendered = 0;
+let typingQueue        = '';
+let typingActive       = false;
+let typingAborted      = false;
+let charsRendered      = 0;
+let typingDoneCallback = null;
 
 function clearTyping() {
-    typingAborted = true;
-    typingActive  = false;
-    typingQueue   = '';
-    charsRendered = 0;
+    typingAborted      = true;
+    typingActive       = false;
+    typingQueue        = '';
+    charsRendered      = 0;
+    typingDoneCallback = null;
     document.getElementById('output-pre').classList.remove('streaming');
 }
 
@@ -49,6 +91,11 @@ function enqueueText(text) {
 function processQueue() {
     if (typingAborted || typingQueue.length === 0) {
         typingActive = false;
+        if (!typingAborted && typingDoneCallback) {
+            const cb = typingDoneCallback;
+            typingDoneCallback = null;
+            cb();
+        }
         return;
     }
     typingActive = true;
@@ -65,20 +112,12 @@ function processQueue() {
     setTimeout(processQueue, 5);
 }
 
-function renderLargeOutput(text, el) {
-    el.textContent = '';
+function renderOutput(text, el) {
     el.classList.remove('streaming');
-    const chunkSize = 500;
-    let i = 0;
-
-    function appendChunk() {
-        if (i >= text.length) return;
-        el.textContent += text.slice(i, i + chunkSize);
-        i += chunkSize;
-        requestAnimationFrame(appendChunk);
+    el.innerHTML = formatOutput(text);
+    if (isTruncated(text)) {
+        el.innerHTML += '<span class="muted">\n\n[Warning: Response may be truncated]</span>';
     }
-
-    appendChunk();
 }
 
 function isTruncated(text) {
@@ -179,12 +218,7 @@ function selectStep(id) {
         pre.className = 'muted';
     } else if (step.result) {
         pre.className = step.status === 'error' ? 'error-text' : '';
-        renderLargeOutput(step.result, pre);
-        if (isTruncated(step.result)) {
-            requestAnimationFrame(() => {
-                pre.textContent += '\n\n[Warning: Response may be truncated]';
-            });
-        }
+        renderOutput(step.result, pre);
     } else if (step.status === 'running') {
         pre.textContent = 'Running...';
         pre.className = 'muted';
@@ -312,6 +346,10 @@ async function runWorkflowStream() {
             label.textContent = STEP_NAMES[firstStep] || firstStep;
             pre.className = 'fade-in';
             clearTyping();
+            typingDoneCallback = () => {
+                const step = steps.find(s => s.id === firstStep);
+                if (step?.result) renderOutput(step.result, pre);
+            };
             enqueueText(steps.find(s => s.id === firstStep)?.result || '');
             renderSteps();
         }
@@ -329,6 +367,14 @@ async function runWorkflowStream() {
 }
 
 renderSteps();
+
+document.getElementById('output-pre').addEventListener('click', e => {
+    const btn = e.target.closest('.toggle-btn');
+    if (!btn) return;
+    const pre = btn.nextElementSibling;
+    const nowHidden = pre.classList.toggle('hidden');
+    btn.textContent = nowHidden ? 'Show Code' : 'Hide Code';
+});
 
 // Dev helper — paste into browser console to verify output panel isn't clipping:
 // document.getElementById('output-pre').textContent = 'TEST\n'.repeat(200);
