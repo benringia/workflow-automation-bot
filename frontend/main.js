@@ -1,3 +1,5 @@
+const API_BASE = 'https://workflow-automation-bot-production.up.railway.app';
+
 const STEP_NAMES = {
     'generate-feature': 'Generate',
     'debug':            'Analyze',
@@ -300,7 +302,7 @@ async function runWorkflowStream() {
     };
 
     try {
-        const response = await fetch('/route-stream', {
+        const response = await fetch(`${API_BASE}/route-stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ input })
