@@ -1,4 +1,4 @@
-const API_BASE = 'https://workflow-automation-bot-production.up.railway.app';
+const API_BASE = 'https://workflow-automation-bot-production-8cec.up.railway.app';
 
 const STEP_NAMES = {
     'generate-feature': 'Generate',
