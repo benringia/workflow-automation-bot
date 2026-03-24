@@ -25,8 +25,47 @@ let workflowResults = [];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// --- Typing engine ---
+let typingQueue   = '';
+let typingActive  = false;
+let typingAborted = false;
+let charsRendered = 0;
+
+function clearTyping() {
+    typingAborted = true;
+    typingActive  = false;
+    typingQueue   = '';
+    charsRendered = 0;
+    document.getElementById('output-pre').classList.remove('streaming');
+}
+
+function enqueueText(text) {
+    typingQueue += text;
+    if (!typingActive) processQueue();
+}
+
+function processQueue() {
+    if (typingAborted || typingQueue.length === 0) {
+        typingActive = false;
+        return;
+    }
+    typingActive = true;
+    const pre = document.getElementById('output-pre');
+    if (pre.textContent.length > 15000) {
+        pre.textContent = pre.textContent.slice(-15000);
+    }
+    pre.textContent += typingQueue[0];
+    typingQueue = typingQueue.slice(1);
+    charsRendered++;
+    if (charsRendered % 20 === 0) {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
+    }
+    setTimeout(processQueue, 5);
+}
+
 function renderLargeOutput(text, el) {
     el.textContent = '';
+    el.classList.remove('streaming');
     const chunkSize = 500;
     let i = 0;
 
@@ -101,6 +140,7 @@ function renderSteps() {
 }
 
 function selectStep(id) {
+    clearTyping();
     selectedStep = id;
     renderSteps();
 
@@ -201,6 +241,7 @@ async function runWorkflowStream() {
             renderSteps();
         },
         'step-start'({ step }) {
+            clearTyping();
             streamBuffers[step] = '';
             setStepStatus(step, 'running');
             if (!firstStreamingStep) {
@@ -208,22 +249,37 @@ async function runWorkflowStream() {
                 selectedStep = step;
                 label.textContent = STEP_NAMES[step] || step;
                 pre.textContent = '';
-                pre.className = '';
+                pre.className = 'fade-in';
+                pre.classList.add('streaming');
                 renderSteps();
+            } else if (selectedStep === step) {
+                pre.textContent = '';
+                pre.className = 'fade-in';
+                pre.classList.add('streaming');
             }
+            typingAborted = false;
         },
         chunk({ step, chunk }) {
             streamBuffers[step] = (streamBuffers[step] || '') + chunk;
             if (selectedStep === step) {
-                pre.textContent += chunk;
-                document.querySelector('.output-box').scrollTop =
-                    document.querySelector('.output-box').scrollHeight;
+                enqueueText(chunk);
             }
         },
         'step-complete'({ step }) {
             setStepStatus(step, 'done', streamBuffers[step] || '');
+            if (selectedStep === step) {
+                const waitForQueue = () => {
+                    if (typingQueue.length === 0 && !typingActive) {
+                        pre.classList.remove('streaming');
+                    } else {
+                        setTimeout(waitForQueue, 50);
+                    }
+                };
+                waitForQueue();
+            }
         },
         'step-error'({ step, error }) {
+            clearTyping();
             setStepStatus(step, 'error', `Error: ${error}`);
             if (selectedStep === step) {
                 pre.textContent = `Error: ${error}`;
@@ -231,12 +287,20 @@ async function runWorkflowStream() {
             }
         },
         done() {
+            const waitForQueue = () => {
+                if (typingQueue.length === 0 && !typingActive) {
+                    pre.classList.remove('streaming');
+                } else {
+                    setTimeout(waitForQueue, 50);
+                }
+            };
+            waitForQueue();
             btn.disabled = false;
         }
     };
 
     try {
-        const response = await fetch('http://localhost:5000/route-stream', {
+        const response = await fetch('/route-stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ input })
@@ -244,6 +308,7 @@ async function runWorkflowStream() {
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
         await readSSEStream(response, handlers);
     } catch (err) {
+        clearTyping();
         console.error('Stream error:', err);
         pre.textContent = `Network error: ${err.message}`;
         pre.className = 'error-text';
