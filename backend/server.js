@@ -1,14 +1,17 @@
-require('dotenv').config();
+console.log("SERVER LOADED");
+require('dotenv').config({ path: './backend/.env' });
 const app = require('./app');
 const debugController = require('./controllers/debugController');
+const generateFeatureController = require('./controllers/generateFeatureController');
+const refactorController = require('./controllers/refactorController');
+const explainCodeController = require('./controllers/explainCodeController');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
-/**
- * Register the /debug route before starting the server.
- * Ensure it uses the app instance where JSON middleware is applied.
- */
 app.post('/debug', debugController.handleDebug);
+app.post('/generate-feature', generateFeatureController.handleGenerateFeature);
+app.post('/refactor', refactorController.handleRefactor);
+app.post('/explain-code', explainCodeController.handleExplainCode);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

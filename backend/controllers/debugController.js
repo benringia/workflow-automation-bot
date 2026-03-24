@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const geminiService = require('../services/geminiService');
+const claudeService = require('../services/claudeService');
 
 /**
  * Handles debugging requests by injecting code and context into a prompt template.
@@ -51,7 +51,7 @@ async function handleDebug(req, res) {
             .replace('{{code_snippet_or_error}}', cleanedCode);
 
         // Call AI service with formatted prompt and handle potential failures
-        const aiResponse = await geminiService.sendPrompt(finalPrompt);
+        const aiResponse = await claudeService.sendPrompt(finalPrompt);
 
         // Return the AI generated result
         res.json({
