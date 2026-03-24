@@ -1,5 +1,10 @@
-console.log("SERVER LOADED");
 require('dotenv').config({ path: './backend/.env' });
+
+if (!process.env.CLAUDE_API_KEY) {
+    console.error('FATAL: CLAUDE_API_KEY environment variable is not set. Exiting.');
+    process.exit(1);
+}
+
 const app = require('./app');
 const debugController = require('./controllers/debugController');
 const generateFeatureController = require('./controllers/generateFeatureController');
@@ -9,6 +14,8 @@ const routeController = require('./controllers/routeController');
 const routeStreamController = require('./controllers/routeStreamController');
 
 const PORT = process.env.PORT || 5000;
+
+console.log(`Starting server — PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || 'development'}`);
 
 app.post('/debug', debugController.handleDebug);
 app.post('/generate-feature', generateFeatureController.handleGenerateFeature);

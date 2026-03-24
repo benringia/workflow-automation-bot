@@ -3,7 +3,7 @@ const path = require('path');
 const { sendPrompt } = require('../services/claudeService');
 
 async function handleGenerateFeature(req, res) {
-    console.log("🔥 GENERATE FEATURE CONTROLLER RUNNING");
+    console.log('[generateFeatureController] handleGenerateFeature called');
     const { feature } = req.body || {};
 
     if (!feature || typeof feature !== 'string') {

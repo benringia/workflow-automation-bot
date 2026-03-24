@@ -44,11 +44,7 @@ async function handleDebug(req, res) {
         // Read the prompt template
         let promptTemplate = fs.readFileSync(promptPath, 'utf8');
 
-        // Replace placeholders: tech_stack and file_paths from req.body if available
-        const finalPrompt = promptTemplate
-            .replace('{{tech_stack}}', req.body?.tech_stack || 'N/A')
-            .replace('{{file_paths}}', req.body?.file_paths || 'N/A')
-            .replace('{{code_snippet_or_error}}', cleanedCode);
+        const finalPrompt = promptTemplate.replace('{{code_snippet_or_error}}', cleanedCode);
 
         // Call AI service with formatted prompt and handle potential failures
         const aiResponse = await claudeService.sendPrompt(finalPrompt);
@@ -60,13 +56,11 @@ async function handleDebug(req, res) {
         });
 
     } catch (error) {
-        // Log service-level errors clearly without crashing the system
-        console.error("Debug Controller Error:", error.message);
-        
-        // Return structured error response to the client
+        console.error('Debug Controller Error:', error.message, error.response?.data || '');
         res.status(500).json({
             success: false,
-            error: error.message || "An error occurred while processing the debug request."
+            error: error.message || 'An error occurred while processing the debug request.',
+            details: error.response?.data || null
         });
     }
 }

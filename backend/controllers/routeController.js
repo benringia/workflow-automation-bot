@@ -86,48 +86,46 @@ async function handleRoute(req, res) {
     const stepInput = input.trim().slice(0, 8000);
 
     const stepPromises = detectedSteps.map(async (stepName) => {
-        const config = STEP_CONFIG[stepName];
-        const promptPath = path.join(__dirname, `../../prompts/${config.file}`);
+        try {
+            const config = STEP_CONFIG[stepName];
+            const promptPath = path.join(__dirname, `../../prompts/${config.file}`);
 
-        if (!fs.existsSync(promptPath)) {
-            return { step: stepName, input: stepInput, error: `Prompt template not found for ${stepName}`, meta: { length: 0 } };
-        }
-
-        const template = fs.readFileSync(promptPath, 'utf-8');
-        const placeholderRegex = new RegExp(config.placeholder.replace(/[{}]/g, '\\$&'), 'g');
-        const finalPrompt = template.replace(placeholderRegex, stepInput);
-        const result = await sendPrompt(finalPrompt);
-
-        console.log(`[${stepName}] response length: ${result ? result.length : 0}`);
-
-        if (!result || result.length < 50) {
-            throw new Error(`Claude returned incomplete response for step "${stepName}" (${result ? result.length : 0} chars)`);
-        }
-
-        const extracted = extractData(result);
-        return {
-            step: stepName,
-            input: stepInput,
-            result,
-            meta: {
-                length: result.length,
-                extracted: {
-                    hasCode:        !!extracted.code,
-                    hasPlan:        !!extracted.plan,
-                    hasExplanation: !!extracted.explanation
-                }
+            if (!fs.existsSync(promptPath)) {
+                return { step: stepName, input: stepInput, error: `Prompt template not found for ${stepName}`, meta: { length: 0 } };
             }
-        };
+
+            const template = fs.readFileSync(promptPath, 'utf-8');
+            const placeholderRegex = new RegExp(config.placeholder.replace(/[{}]/g, '\\$&'), 'g');
+            const finalPrompt = template.replace(placeholderRegex, stepInput);
+            const result = await sendPrompt(finalPrompt);
+
+            console.log(`[${stepName}] response length: ${result ? result.length : 0}`);
+
+            if (!result || result.length < 50) {
+                throw new Error(`Claude returned incomplete response for step "${stepName}" (${result ? result.length : 0} chars)`);
+            }
+
+            const extracted = extractData(result);
+            return {
+                step: stepName,
+                input: stepInput,
+                result,
+                meta: {
+                    length: result.length,
+                    extracted: {
+                        hasCode:        !!extracted.code,
+                        hasPlan:        !!extracted.plan,
+                        hasExplanation: !!extracted.explanation
+                    }
+                }
+            };
+        } catch (err) {
+            console.error(`Route Controller Error [${stepName}]:`, err.message, err.response?.data || '');
+            return { step: stepName, input: stepInput, error: err.message || 'Unknown error', meta: { length: 0 } };
+        }
     });
 
-    const settled = await Promise.allSettled(stepPromises);
-
-    const results = settled.map((outcome, i) => {
-        if (outcome.status === 'fulfilled') return outcome.value;
-        const stepName = detectedSteps[i];
-        console.error(`Route Controller Error [${stepName}]:`, outcome.reason?.message);
-        return { step: stepName, input: stepInput, error: outcome.reason?.message || 'Unknown error', meta: { length: 0 } };
-    });
+    const results = await Promise.all(stepPromises);
 
     res.json({ success: true, intent, detectedSteps, steps: results });
 }

@@ -59,7 +59,7 @@ async function handleRouteStream(req, res) {
             await streamChunks(res, stepName, result);
             sendEvent(res, 'step-complete', { step: stepName });
         } catch (err) {
-            console.error(`[routeStreamController] ${stepName}:`, err.message);
+            console.error(`[routeStreamController] ${stepName}:`, err.message, err.response?.data || '');
             sendEvent(res, 'step-error', { step: stepName, error: err.message || 'Unknown error' });
         }
     }
