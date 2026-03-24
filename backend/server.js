@@ -12,6 +12,7 @@ const refactorController = require('./controllers/refactorController');
 const explainCodeController = require('./controllers/explainCodeController');
 const routeController = require('./controllers/routeController');
 const routeStreamController = require('./controllers/routeStreamController');
+const workflowController = require('./controllers/workflowController');
 
 const PORT = process.env.PORT || 5000;
 
@@ -23,6 +24,7 @@ app.post('/refactor', refactorController.handleRefactor);
 app.post('/explain-code', explainCodeController.handleExplainCode);
 app.post('/route', routeController.handleRoute);
 app.post('/route-stream', routeStreamController.handleRouteStream);
+app.post('/workflow/run', workflowController.handleWorkflowRun);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

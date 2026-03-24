@@ -91,6 +91,15 @@ function isTruncated(text) {
            !trimmed.endsWith('?');
 }
 
+function moveStep(id, direction) {
+    const idx = steps.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= steps.length) return;
+    [steps[idx], steps[swapIdx]] = [steps[swapIdx], steps[idx]];
+    renderSteps();
+}
+
 function renderSteps() {
     const container = document.getElementById('workflow');
     container.innerHTML = '';
@@ -116,6 +125,10 @@ function renderSteps() {
         card.innerHTML = `
             <div class="card-top">
                 <span class="step-label">${step.label}</span>
+                <div class="move-btns">
+                    <button class="move-btn" data-move="up" data-id="${step.id}" title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button>
+                    <button class="move-btn" data-move="down" data-id="${step.id}" title="Move down" ${i === steps.length - 1 ? 'disabled' : ''}>▼</button>
+                </div>
                 <label class="toggle" title="${step.enabled ? 'Disable' : 'Enable'} step">
                     <input type="checkbox" ${step.enabled ? 'checked' : ''} data-id="${step.id}" />
                     <span class="toggle-track"></span>
@@ -125,8 +138,15 @@ function renderSteps() {
         `;
 
         card.addEventListener('click', e => {
-            if (e.target.closest('.toggle')) return;
+            if (e.target.closest('.toggle') || e.target.closest('.move-btns')) return;
             selectStep(step.id);
+        });
+
+        card.querySelectorAll('.move-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                moveStep(btn.dataset.id, btn.dataset.move);
+            });
         });
 
         card.querySelector('input[type="checkbox"]').addEventListener('change', e => {
@@ -212,10 +232,39 @@ async function readSSEStream(response, handlers) {
     }
 }
 
+const STEP_NODE_TYPE = {
+    'generate-feature': 'ai.generate',
+    'debug':            'ai.debug',
+    'refactor':         'ai.refactor',
+    'explain-code':     'ai.explain'
+};
+
+function buildActiveNodes() {
+    const nodes = [];
+    const nodeStepMap = {};
+    steps
+        .filter(s => s.enabled)
+        .forEach((s, i) => {
+            const id = String(i + 1);
+            nodes.push({ id, type: STEP_NODE_TYPE[s.id] });
+            nodeStepMap[id] = s.id;
+        });
+    return { nodes, nodeStepMap };
+}
+
 async function runWorkflowStream() {
     const input = document.getElementById('task-input').value.trim();
     const btn = document.getElementById('run-btn');
     if (!input) { document.getElementById('task-input').focus(); return; }
+
+    const { nodes, nodeStepMap } = buildActiveNodes();
+    const activeStepIds = new Set(Object.values(nodeStepMap));
+
+    if (nodes.length === 0) {
+        document.getElementById('output-pre').textContent = 'Enable at least one step to run the workflow.';
+        document.getElementById('output-pre').className = 'muted';
+        return;
+    }
 
     btn.disabled = true;
     steps = steps.map(s => ({ ...s, status: 'pending', result: null }));
@@ -225,100 +274,56 @@ async function runWorkflowStream() {
     const pre = document.getElementById('output-pre');
     const label = document.getElementById('output-label');
     label.textContent = '';
-    pre.textContent = 'Detecting intent...';
+    pre.textContent = 'Running workflow...';
     pre.className = 'muted';
 
-    const streamBuffers = {};
-    let firstStreamingStep = null;
+    // Mark disabled steps as skipped
+    steps.forEach(s => {
+        if (!activeStepIds.has(s.id)) setStepStatus(s.id, 'done', 'Step not required for this request.');
+    });
 
-    const handlers = {
-        init({ intent, detectedSteps }) {
-            pre.textContent = intent;
-            steps.forEach(step => {
-                if (!detectedSteps.includes(step.id)) {
-                    step.status = 'done';
-                    step.result = 'Step not required for this request.';
-                }
-            });
-            renderSteps();
-        },
-        'step-start'({ step }) {
-            clearTyping();
-            streamBuffers[step] = '';
-            setStepStatus(step, 'running');
-            if (!firstStreamingStep) {
-                firstStreamingStep = step;
-                selectedStep = step;
-                label.textContent = STEP_NAMES[step] || step;
-                pre.textContent = '';
-                pre.className = 'fade-in';
-                pre.classList.add('streaming');
-                renderSteps();
-            } else if (selectedStep === step) {
-                pre.textContent = '';
-                pre.className = 'fade-in';
-                pre.classList.add('streaming');
-            }
-            typingAborted = false;
-        },
-        chunk({ step, chunk }) {
-            streamBuffers[step] = (streamBuffers[step] || '') + chunk;
-            if (selectedStep === step) {
-                enqueueText(chunk);
-            }
-        },
-        'step-complete'({ step }) {
-            setStepStatus(step, 'done', streamBuffers[step] || '');
-            if (selectedStep === step) {
-                const waitForQueue = () => {
-                    if (typingQueue.length === 0 && !typingActive) {
-                        pre.classList.remove('streaming');
-                    } else {
-                        setTimeout(waitForQueue, 50);
-                    }
-                };
-                waitForQueue();
-            }
-        },
-        'step-error'({ step, error }) {
-            clearTyping();
-            setStepStatus(step, 'error', `Error: ${error}`);
-            if (selectedStep === step) {
-                pre.textContent = `Error: ${error}`;
-                pre.className = 'error-text';
-            }
-        },
-        done() {
-            const waitForQueue = () => {
-                if (typingQueue.length === 0 && !typingActive) {
-                    pre.classList.remove('streaming');
-                } else {
-                    setTimeout(waitForQueue, 50);
-                }
-            };
-            waitForQueue();
-            btn.disabled = false;
-        }
-    };
+    // Mark active nodes as running
+    nodes.forEach(node => setStepStatus(nodeStepMap[node.id], 'running'));
 
     try {
-        const response = await fetch(`${API_BASE}/route-stream`, {
+        const response = await fetch(`${API_BASE}/workflow/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input })
+            body: JSON.stringify({ nodes, input })
         });
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
-        await readSSEStream(response, handlers);
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Workflow failed');
+
+        let firstStep = null;
+        nodes.forEach(node => {
+            const stepId = nodeStepMap[node.id];
+            const result = data.results?.[node.id];
+            if (result?.output) {
+                setStepStatus(stepId, 'done', result.output);
+                if (!firstStep) firstStep = stepId;
+            } else {
+                setStepStatus(stepId, 'error', result?.error || 'No output');
+            }
+        });
+
+        if (firstStep) {
+            selectedStep = firstStep;
+            label.textContent = STEP_NAMES[firstStep] || firstStep;
+            pre.className = 'fade-in';
+            clearTyping();
+            enqueueText(steps.find(s => s.id === firstStep)?.result || '');
+            renderSteps();
+        }
     } catch (err) {
         clearTyping();
-        console.error('Stream error:', err);
-        pre.textContent = `Network error: ${err.message}`;
+        console.error('Workflow error:', err);
+        pre.textContent = `Error: ${err.message}`;
         pre.className = 'error-text';
     } finally {
         btn.disabled = false;
-        // Clear any steps still in running state (stream ended without step-complete)
         steps.forEach(step => {
-            if (step.status === 'running') setStepStatus(step.id, 'error', 'Stream ended unexpectedly');
+            if (step.status === 'running') setStepStatus(step.id, 'error', 'Workflow ended unexpectedly');
         });
     }
 }
