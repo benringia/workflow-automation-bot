@@ -37,6 +37,13 @@ async function handleRouteStream(req, res) {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    const timeout = setTimeout(() => {
+        if (!res.writableEnded) {
+            sendEvent(res, 'done', { error: 'Request timed out' });
+            res.end();
+        }
+    }, 25000);
+
     const detectedSteps = detectSteps(input);
     const intent = describeIntent(detectedSteps);
     const stepInput = input.trim().slice(0, 8000);
@@ -64,6 +71,7 @@ async function handleRouteStream(req, res) {
         }
     }
 
+    clearTimeout(timeout);
     sendEvent(res, 'done', { intent, detectedSteps });
     res.end();
 }

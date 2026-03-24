@@ -314,7 +314,12 @@ async function runWorkflowStream() {
         console.error('Stream error:', err);
         pre.textContent = `Network error: ${err.message}`;
         pre.className = 'error-text';
+    } finally {
         btn.disabled = false;
+        // Clear any steps still in running state (stream ended without step-complete)
+        steps.forEach(step => {
+            if (step.status === 'running') setStepStatus(step.id, 'error', 'Stream ended unexpectedly');
+        });
     }
 }
 
