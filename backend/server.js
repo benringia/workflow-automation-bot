@@ -6,6 +6,7 @@ const generateFeatureController = require('./controllers/generateFeatureControll
 const refactorController = require('./controllers/refactorController');
 const explainCodeController = require('./controllers/explainCodeController');
 const routeController = require('./controllers/routeController');
+const routeStreamController = require('./controllers/routeStreamController');
 
 const PORT = process.env.PORT || 5000;
 
@@ -14,6 +15,7 @@ app.post('/generate-feature', generateFeatureController.handleGenerateFeature);
 app.post('/refactor', refactorController.handleRefactor);
 app.post('/explain-code', explainCodeController.handleExplainCode);
 app.post('/route', routeController.handleRoute);
+app.post('/route-stream', routeStreamController.handleRouteStream);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

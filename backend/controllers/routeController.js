@@ -132,4 +132,4 @@ async function handleRoute(req, res) {
     res.json({ success: true, intent, detectedSteps, steps: results });
 }
 
-module.exports = { handleRoute };
+module.exports = { handleRoute, detectSteps, describeIntent, STEP_CONFIG };

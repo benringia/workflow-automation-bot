@@ -141,91 +141,112 @@ function setStepStatus(id, status, result = null) {
     if (selectedStep === id) selectStep(id);
 }
 
-async function runWorkflow() {
+function parseSSEEvent(rawEvent, handlers) {
+    let eventType = 'message';
+    let dataLine = '';
+    for (const line of rawEvent.split('\n')) {
+        if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+        if (line.startsWith('data: '))  dataLine  = line.slice(6).trim();
+    }
+    if (!dataLine) return;
+    try {
+        handlers[eventType]?.(JSON.parse(dataLine));
+    } catch { /* malformed data — skip */ }
+}
+
+async function readSSEStream(response, handlers) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+            parseSSEEvent(buffer.slice(0, boundary), handlers);
+            buffer = buffer.slice(boundary + 2);
+        }
+    }
+}
+
+async function runWorkflowStream() {
     const input = document.getElementById('task-input').value.trim();
     const btn = document.getElementById('run-btn');
-
-    if (!input) {
-        document.getElementById('task-input').focus();
-        return;
-    }
+    if (!input) { document.getElementById('task-input').focus(); return; }
 
     btn.disabled = true;
-
     steps = steps.map(s => ({ ...s, status: 'pending', result: null }));
     selectedStep = null;
     renderSteps();
 
-    const label = document.getElementById('output-label');
     const pre = document.getElementById('output-pre');
+    const label = document.getElementById('output-label');
     label.textContent = '';
     pre.textContent = 'Detecting intent...';
     pre.className = 'muted';
 
+    const streamBuffers = {};
+    let firstStreamingStep = null;
+
+    const handlers = {
+        init({ intent, detectedSteps }) {
+            pre.textContent = intent;
+            steps.forEach(step => {
+                if (!detectedSteps.includes(step.id)) {
+                    step.status = 'done';
+                    step.result = 'Step not required for this request.';
+                }
+            });
+            renderSteps();
+        },
+        'step-start'({ step }) {
+            streamBuffers[step] = '';
+            setStepStatus(step, 'running');
+            if (!firstStreamingStep) {
+                firstStreamingStep = step;
+                selectedStep = step;
+                label.textContent = STEP_NAMES[step] || step;
+                pre.textContent = '';
+                pre.className = '';
+                renderSteps();
+            }
+        },
+        chunk({ step, chunk }) {
+            streamBuffers[step] = (streamBuffers[step] || '') + chunk;
+            if (selectedStep === step) {
+                pre.textContent += chunk;
+                document.querySelector('.output-box').scrollTop =
+                    document.querySelector('.output-box').scrollHeight;
+            }
+        },
+        'step-complete'({ step }) {
+            setStepStatus(step, 'done', streamBuffers[step] || '');
+        },
+        'step-error'({ step, error }) {
+            setStepStatus(step, 'error', `Error: ${error}`);
+            if (selectedStep === step) {
+                pre.textContent = `Error: ${error}`;
+                pre.className = 'error-text';
+            }
+        },
+        done() {
+            btn.disabled = false;
+        }
+    };
+
     try {
-        const res = await fetch('http://localhost:5000/route', {
+        const response = await fetch('http://localhost:5000/route-stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ input })
         });
-
-        const data = await res.json();
-
-        console.log('Frontend steps:', steps.map(s => s.id));
-        console.log('Backend steps:', data.steps.map(s => s.step));
-
-        if (!data.success) {
-            pre.textContent = `Error: ${data.error}`;
-            pre.className = 'error-text';
-            btn.disabled = false;
-            return;
-        }
-
-        workflowResults = data.steps;
-
-        let firstDone = null;
-
-        for (let i = 0; i < workflowResults.length; i++) {
-            const stepResult = workflowResults[i];
-            const normalizedId = STEP_ID_NORMALIZE[stepResult.step] || stepResult.step;
-            const index = steps.findIndex(s => s.id === normalizedId);
-            if (index === -1) {
-                console.warn(`No card for step id: "${stepResult.step}" (normalized: "${normalizedId}")`);
-                continue;
-            }
-
-            steps[index].status = 'running';
-            renderSteps();
-            await sleep(300);
-
-            const status = stepResult.error ? 'error' : 'done';
-            steps[index].status = status;
-            steps[index].result = stepResult.result || `Error: ${stepResult.error}`;
-            renderSteps();
-            if (selectedStep === steps[index].id) selectStep(steps[index].id);
-
-            if (!firstDone && status === 'done') firstDone = steps[index].id;
-        }
-
-        // Mark enabled steps not returned by the backend as not required
-        steps.forEach(step => {
-            const wasReturned = workflowResults.some(r =>
-                (STEP_ID_NORMALIZE[r.step] || r.step) === step.id
-            );
-            if (step.enabled && !wasReturned) {
-                step.status = 'done';
-                step.result = 'Step not required for this request.';
-            }
-        });
-        renderSteps();
-
-        pre.textContent = 'Run complete. Click a step to see its output.';
-        if (firstDone) selectStep(firstDone);
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        await readSSEStream(response, handlers);
     } catch (err) {
-        console.error('Fetch error:', err);
+        console.error('Stream error:', err);
         pre.textContent = `Network error: ${err.message}`;
         pre.className = 'error-text';
-    } finally {
         btn.disabled = false;
     }
 }
