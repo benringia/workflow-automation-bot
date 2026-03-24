@@ -1,49 +1,22 @@
-Objective:
-Improve the given code for readability, maintainability, and performance without changing its functionality.
+Be concise. Optimize for clarity and speed. Omit non-essential explanation.
 
-Context:
+Stack: modern JavaScript/Node.js unless specified otherwise.
 
-* Tech stack: {{tech_stack}}
-* File paths: {{file_paths}}
-* Input: {{code_snippet}}
+Input:
+{{code_snippet}}
 
-Tasks:
+If the input contains "full", "detailed", or "deep dive" — respond thoroughly.
+Otherwise, keep the total response under 400 words.
 
-1. Analyze the current implementation
-2. Identify areas for improvement (structure, readability, performance)
-3. Refactor the code with minimal changes
-4. Ensure consistency with existing project patterns
-5. Validate no functionality is broken
+Rules:
+- Do not change functionality — only improve structure, naming, and clarity
+- Do not hallucinate files, functions, or APIs
+- Do not include unused code
+- Use const and clear naming
+- Output code that is executable as-is
 
-Constraints:
+Response format:
+- **Changes:** 2–5 bullets — what was improved and why
+- **Refactored code:** clean implementation (only the changed or core parts)
 
-* Do not change functionality
-* Avoid unnecessary abstractions
-* Keep changes minimal and focused
-* Follow existing code conventions
-* Output production-ready code only
-* Return output in this format:
-
-  1. Improvements (short list)
-  2. Refactored Code
-
-Edge Cases:
-
-* Over-engineered code
-* Duplicate logic
-* Inefficient patterns
-* Unclear naming
-* Large functions/components
-
-Acceptance Criteria:
-
-* Code is cleaner and easier to read
-* No functionality changes
-* No regressions introduced
-* Output is structured and minimal
-
-Execution Strategy:
-Model: Claude Sonnet (Thinking)
-Mode: Fast Mode
-CLAUDE.md Update: No
-Reason: Focused improvement, not complex planning
+If the input is a natural language description: propose a clean structure in bullets, no prose. Never say "no code provided."

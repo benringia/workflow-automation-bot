@@ -2,133 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AI Dev Assistant</title>
+  <title>AI Workflow Builder</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body {
-      height: 100%;
-      background: #111827;
-      color: #e0e0e0;
+    html {
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+
+    body {
+      min-height: 100vh;
+      overflow-y: auto;
+      background: #0f172a;
+      color: #e2e8f0;
       font-family: monospace;
     }
 
-    .app {
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
       display: flex;
       flex-direction: column;
-      height: 100%;
-      max-width: 860px;
-      margin: 0 auto;
+      min-height: 100vh;
+      overflow: visible;
+      gap: 2rem;
     }
 
-    header {
-      padding: 1rem 1.5rem;
-      border-bottom: 1px solid #1f2937;
-      flex-shrink: 0;
-    }
-
+    /* Header */
     header h1 {
-      font-size: 1.1rem;
+      font-size: 1.2rem;
       color: #a78bfa;
       letter-spacing: 0.05em;
     }
+    header p {
+      margin-top: 0.3rem;
+      font-size: 0.8rem;
+      color: #475569;
+    }
 
-    #chat {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1.5rem;
+    /* Input */
+    .input-panel {
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
     }
 
-    .message {
-      max-width: 78%;
-      padding: 0.75rem 1rem;
-      border-radius: 10px;
-      font-size: 0.85rem;
-      line-height: 1.55;
-    }
-
-    .message pre {
-      white-space: pre-wrap;
-      word-break: break-word;
-      font-family: inherit;
-    }
-
-    .message.user {
-      align-self: flex-end;
-      background: #7c3aed;
-      color: #fff;
-      border-bottom-right-radius: 2px;
-    }
-
-    .message.ai {
-      align-self: flex-start;
-      background: #1f2937;
-      color: #d1fae5;
-      border-bottom-left-radius: 2px;
-    }
-
-    .message.loading {
-      align-self: flex-start;
-      background: #1f2937;
-      color: #6b7280;
-      font-style: italic;
-    }
-
-    .message.error {
-      align-self: flex-start;
-      background: #1f2937;
-      color: #f87171;
-    }
-
-    .input-area {
-      flex-shrink: 0;
-      border-top: 1px solid #1f2937;
-      padding: 1rem 1.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.6rem;
-    }
-
-    select {
-      width: fit-content;
-      padding: 0.4rem 0.75rem;
-      border-radius: 6px;
-      border: 1px solid #374151;
-      background: #1f2937;
-      color: #e0e0e0;
-      font-family: monospace;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-
-    .input-row {
-      display: flex;
-      gap: 0.6rem;
-      align-items: flex-end;
+    .input-panel label {
+      font-size: 0.8rem;
+      color: #94a3b8;
     }
 
     textarea {
-      flex: 1;
-      padding: 0.7rem;
+      width: 100%;
+      height: 120px;
+      padding: 0.85rem;
       border-radius: 8px;
-      border: 1px solid #374151;
-      background: #1f2937;
-      color: #e0e0e0;
+      border: 1px solid #1e293b;
+      background: #1e293b;
+      color: #e2e8f0;
       font-family: monospace;
-      font-size: 0.85rem;
-      resize: none;
-      height: 80px;
-      line-height: 1.4;
+      font-size: 0.875rem;
+      resize: vertical;
+      line-height: 1.5;
     }
-
     textarea:focus { outline: none; border-color: #7c3aed; }
 
-    button {
-      padding: 0.7rem 1.2rem;
-      border-radius: 8px;
+    button#run-btn {
+      align-self: flex-start;
+      padding: 0.65rem 1.5rem;
+      border-radius: 7px;
       border: none;
       background: #7c3aed;
       color: #fff;
@@ -136,41 +80,206 @@
       font-size: 0.9rem;
       font-weight: bold;
       cursor: pointer;
-      white-space: nowrap;
-      align-self: flex-end;
+    }
+    button#run-btn:hover { background: #6d28d9; }
+    button#run-btn:disabled { background: #334155; cursor: not-allowed; }
+
+    /* Pipeline */
+    .pipeline-section h2,
+    .output-section h2 {
+      font-size: 0.72rem;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
     }
 
-    button:hover { background: #6d28d9; }
-    button:disabled { background: #374151; cursor: not-allowed; }
-
-    .hint {
-      font-size: 0.75rem;
-      color: #4b5563;
+    #workflow {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
+
+    .connector {
+      color: #334155;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    /* Step cards */
+    .step-card {
+      flex: 1;
+      min-width: 130px;
+      padding: 0.85rem 1rem;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+      background: #1e293b;
+      cursor: pointer;
+      transition: border-color 0.15s, opacity 0.15s;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .step-card:hover { border-color: #475569; }
+    .step-card.selected { border-color: #a78bfa; }
+    .step-card.running  { border-color: #f59e0b; }
+    .step-card.done     { border-color: #22c55e; }
+    .step-card.error    { border-color: #ef4444; }
+    .step-card.disabled { opacity: 0.4; cursor: default; }
+    .step-card.disabled:hover { border-color: #1e293b; }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .step-label {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #e2e8f0;
+    }
+
+    .step-badge {
+      font-size: 0.68rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      width: fit-content;
+    }
+
+    .step-badge.pending { background: #0f172a; color: #64748b; border: 1px solid #334155; }
+    .step-badge.running { background: #78350f; color: #fcd34d; animation: pulse 1s infinite; }
+    .step-badge.done    { background: #14532d; color: #86efac; }
+    .step-badge.error   { background: #7f1d1d; color: #fca5a5; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Toggle */
+    .toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-track {
+      display: block;
+      width: 28px;
+      height: 16px;
+      border-radius: 999px;
+      background: #334155;
+      position: relative;
+      transition: background 0.2s;
+    }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #64748b;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track { background: #7c3aed; }
+    .toggle input:checked + .toggle-track::after {
+      transform: translateX(12px);
+      background: #fff;
+    }
+
+    /* Output */
+    .output-section {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .output-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    #output-label {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      font-weight: bold;
+    }
+
+    .output-box {
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      background: #0f172a;
+      padding: 1rem;
+      min-height: 200px;
+      height: auto;
+      overflow: visible;
+    }
+
+    #output-pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: block;
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      line-height: 1.65;
+      padding-bottom: 2rem;
+    }
+
+    #output-pre.muted { color: #475569; }
+    #output-pre.error-text { color: #f87171; }
   </style>
 </head>
 <body>
-  <div class="app">
+  <main>
+
     <header>
-      <h1>AI Dev Assistant</h1>
+      <h1>AI Workflow Builder</h1>
+      <p>Type your request — intent is detected automatically. Toggle steps to include or exclude them.</p>
     </header>
 
-    <div id="chat"></div>
+    <section class="input-panel" aria-label="Task input">
+      <label for="task-input">Describe your task or paste your code</label>
+      <textarea id="task-input" placeholder="e.g. build a rate limiter middleware — or paste code to debug"></textarea>
+      <button id="run-btn" onclick="runWorkflow()">Run Workflow</button>
+    </section>
 
-    <div class="input-area">
-      <select id="action">
-        <option value="debug">debug</option>
-        <option value="refactor">refactor</option>
-        <option value="generate-feature">generate-feature</option>
-        <option value="explain-code">explain-code</option>
-      </select>
-      <div class="input-row">
-        <textarea id="input" placeholder="Paste your code or describe a feature..."></textarea>
-        <button id="send-btn" onclick="sendMessage()">Send</button>
+    <section class="pipeline-section" aria-label="Pipeline steps">
+      <h2>Pipeline</h2>
+      <div id="workflow" role="list"></div>
+    </section>
+
+    <section class="output-section" aria-label="Step output">
+      <div class="output-header">
+        <h2>Output</h2>
+        <span id="output-label"></span>
       </div>
-      <span class="hint">Ctrl+Enter to send</span>
-    </div>
-  </div>
+      <div class="output-box">
+        <pre id="output-pre" class="muted">Click a step card to view its output.</pre>
+      </div>
+    </section>
+
+  </main>
 
   <script src="main.js"></script>
 </body>

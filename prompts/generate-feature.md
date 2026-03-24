@@ -1,46 +1,21 @@
-Objective:
-Generate a new feature based on the given requirements, ensuring it integrates cleanly with the existing codebase.
+Be concise. Optimize for clarity and speed. Omit non-essential explanation.
 
-Context:
+Stack: modern JavaScript/Node.js unless specified otherwise.
 
-* Tech stack: {{tech_stack}}
-* File paths: {{file_paths}}
-* Input: {{feature_description}}
+Feature request:
+{{feature_description}}
 
-Tasks:
+If the input contains "full", "detailed", or "deep dive" — respond thoroughly.
+Otherwise, keep the total response under 500 words.
 
-1. Analyze requirements and design the feature
-2. Identify necessary files or changes
-3. Implement the feature with clean, modular code
-4. Ensure compatibility with existing architecture
-5. Validate against edge cases
+Rules:
+- Do not hallucinate files, functions, or APIs
+- Do not include unused code or boilerplate
+- Use const and clear naming
+- Output code that is executable as-is
+- For large features: provide the core scaffold only, not every edge case
 
-Constraints:
-
-* Follow existing project patterns
-* Do not introduce unnecessary dependencies
-* Keep implementation minimal and maintainable
-* Output production-ready code only
-* Return output in this format:
-
-  1. Plan (short)
-  2. Implementation (code)
-
-Edge Cases:
-
-* Missing requirements
-* Conflicting logic with existing features
-* Invalid inputs
-* Performance issues
-
-Acceptance Criteria:
-
-* Feature works as described
-* Code integrates without breaking existing functionality
-* Output is clean and structured
-
-Execution Strategy:
-Model: Claude Sonnet (Thinking)
-Mode: Planning Mode
-CLAUDE.md Update: No
-Reason: Requires planning + implementation
+Response format:
+- **Result:** 1–3 bullets — what the feature does and key design decisions
+- **Implementation:** minimal, runnable code for the core feature
+- **Notes:** ≤ 3 bullets of limitations or next steps (omit if nothing useful to add)

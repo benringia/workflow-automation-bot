@@ -1,46 +1,21 @@
-Objective:
-Explain the provided code clearly and concisely for developer understanding.
+Be concise. Optimize for clarity and speed. Omit non-essential explanation.
 
-Context:
+Stack: modern JavaScript/Node.js unless specified otherwise.
 
-* Tech stack: {{tech_stack}}
-* File paths: {{file_paths}}
-* Input: {{code_snippet}}
+Input:
+{{code_snippet}}
 
-Tasks:
+If the input contains "full", "detailed", or "deep dive" — respond thoroughly.
+Otherwise, keep the total response under 300 words.
 
-1. Summarize what the code does
-2. Break down key parts step-by-step
-3. Explain important logic and patterns
-4. Highlight potential issues or improvements (if any)
+Rules:
+- Do not repeat or restate the input
+- Do not hallucinate behaviour that isn't present in the code
+- Skip obvious patterns — highlight only non-trivial logic
+- Use plain language; avoid unnecessary jargon
 
-Constraints:
+Response format:
+- **Summary:** ≤ 5 bullets — what this does, how it works, and anything notable
+- **Notes:** ≤ 2 bullets of gotchas or improvements (omit if nothing useful to add)
 
-* Keep explanation concise and clear
-* Avoid unnecessary jargon
-* Focus on developer understanding
-* Do not rewrite code unless necessary
-* Return output in this format:
-
-  1. Summary
-  2. Breakdown
-  3. Notes (optional)
-
-Edge Cases:
-
-* Complex or nested logic
-* Unclear variable naming
-* Missing comments
-* Async or state-related behavior
-
-Acceptance Criteria:
-
-* Explanation is easy to understand
-* Covers key logic accurately
-* Structured and readable output
-
-Execution Strategy:
-Model: Claude Sonnet (Fast)
-Mode: Fast Mode
-CLAUDE.md Update: No
-Reason: Explanation task, low complexity
+If the input is a natural language concept: explain how it works and when to use it, in bullets. Never say "no code provided."
