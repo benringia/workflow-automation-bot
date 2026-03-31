@@ -1,5 +1,7 @@
 const API_BASE = 'https://workflow-automation-bot-production-8cec.up.railway.app';
 
+let mode = 'node';
+
 const STEP_NAMES = {
     'generate-feature': 'Generate',
     'debug':            'Analyze',
@@ -26,6 +28,14 @@ let selectedStep = null;
 let workflowResults = [];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function showLoading() {
+    document.getElementById('loading').style.display = 'block';
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+}
 
 function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -301,6 +311,7 @@ async function runWorkflowStream() {
     }
 
     btn.disabled = true;
+    showLoading();
     steps = steps.map(s => ({ ...s, status: 'pending', result: null }));
     selectedStep = null;
     renderSteps();
@@ -360,13 +371,155 @@ async function runWorkflowStream() {
         pre.className = 'error-text';
     } finally {
         btn.disabled = false;
+        hideLoading();
         steps.forEach(step => {
             if (step.status === 'running') setStepStatus(step.id, 'error', 'Workflow ended unexpectedly');
         });
     }
 }
 
+function runWorkflow() {
+    const input = document.getElementById('task-input').value.trim();
+    if (!input) { document.getElementById('task-input').focus(); return; }
+    if (mode === 'pipeline') {
+        runPipeline(input);
+    } else {
+        runWorkflowStream();
+    }
+}
+
+async function runPipeline(input) {
+    const btn = document.getElementById('run-btn');
+    const pre = document.getElementById('output-pre');
+    const label = document.getElementById('output-label');
+
+    btn.disabled = true;
+    showLoading();
+    label.textContent = 'AI Pipeline';
+    pre.className = 'muted';
+    pre.textContent = 'Generating outputs...';
+
+    try {
+        const res = await fetch(`${API_BASE}/workflow/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                data: { description: input },
+                rules: ['no console logs', 'use async/await']
+            })
+        });
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const result = await res.json();
+        renderPipelineResult(result);
+    } catch (err) {
+        console.error('Pipeline error:', err);
+        pre.textContent = `Error: ${err.message}`;
+        pre.className = 'error-text';
+    } finally {
+        btn.disabled = false;
+        hideLoading();
+    }
+}
+
+function renderPipelineResult(result) {
+    const pre = document.getElementById('output-pre');
+    const label = document.getElementById('output-label');
+
+    if (!result.success) {
+        pre.textContent = `Error: ${result.error || 'Pipeline failed'}`;
+        pre.className = 'error-text';
+        return;
+    }
+
+    label.textContent = 'AI Pipeline';
+    pre.className = 'fade-in';
+    pre.innerHTML = '';
+
+    const { outputs = {}, validation } = result;
+    renderBlock('Code', outputs.code, pre);
+    renderBlock('Docs', outputs.docs, pre);
+    renderBlock('Tests', outputs.tests, pre);
+
+    if (validation && Object.keys(validation).length > 0) {
+        renderValidation(validation, pre);
+    }
+}
+
+function renderBlock(title, content, container) {
+    const section = document.createElement('div');
+    section.className = 'output-section';
+
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    section.appendChild(heading);
+
+    const inner = document.createElement('div');
+    if (content) {
+        inner.innerHTML = formatOutput(content);
+    } else {
+        inner.className = 'muted';
+        inner.textContent = 'No output';
+    }
+    section.appendChild(inner);
+    container.appendChild(section);
+}
+
+function renderValidation(validation, container) {
+    const section = document.createElement('div');
+    section.className = 'output-section';
+
+    const heading = document.createElement('h3');
+    heading.textContent = 'Validation';
+    section.appendChild(heading);
+
+    for (const key of Object.keys(validation)) {
+        const rules = validation[key];
+        const block = document.createElement('div');
+        block.style.marginTop = '0.5rem';
+
+        const keyLabel = document.createElement('strong');
+        keyLabel.style.color = '#a78bfa';
+        keyLabel.textContent = key.toUpperCase();
+        block.appendChild(keyLabel);
+
+        for (const r of rules) {
+            const line = document.createElement('div');
+            line.style.fontSize = '0.8rem';
+            line.style.padding = '2px 0';
+            const pass = r.status === 'PASS';
+            const marker = document.createElement('span');
+            marker.style.color = pass ? '#86efac' : '#fca5a5';
+            marker.textContent = pass ? '✓ ' : '✗ ';
+            line.appendChild(marker);
+            line.appendChild(document.createTextNode(r.rule));
+            if (r.reason) {
+                const reason = document.createElement('span');
+                reason.style.color = '#94a3b8';
+                reason.textContent = ` — ${r.reason}`;
+                line.appendChild(reason);
+            }
+            block.appendChild(line);
+        }
+
+        section.appendChild(block);
+    }
+
+    container.appendChild(section);
+}
+
 renderSteps();
+
+document.getElementById('mode-node').addEventListener('click', () => {
+    mode = 'node';
+    document.getElementById('mode-node').classList.add('active');
+    document.getElementById('mode-pipeline').classList.remove('active');
+});
+
+document.getElementById('mode-pipeline').addEventListener('click', () => {
+    mode = 'pipeline';
+    document.getElementById('mode-pipeline').classList.add('active');
+    document.getElementById('mode-node').classList.remove('active');
+});
 
 document.getElementById('output-pre').addEventListener('click', e => {
     const btn = e.target.closest('.toggle-btn');

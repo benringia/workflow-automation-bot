@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(grep -v '^$')"
+      "Bash(grep -v '^$')",
+      "Bash(C:/Users/Ben/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.6/skills/brainstorming/scripts/start-server.sh --project-dir \"c:/Users/Ben/Documents/claude-projects/workflow-automation-bot\")",
+      "Bash(cat \"c:/Users/Ben/Documents/claude-projects/workflow-automation-bot/.superpowers/brainstorm/\"*/state/server-info)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

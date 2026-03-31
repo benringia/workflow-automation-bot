@@ -338,6 +338,34 @@
     #output-pre.fade-in {
       animation: fadeIn 0.2s ease-out;
     }
+
+    /* Mode toggle */
+    .mode-toggle {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .mode-btn {
+      padding: 0.4rem 0.9rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: transparent;
+      color: #64748b;
+      font-family: monospace;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .mode-btn:hover { border-color: #475569; color: #94a3b8; }
+    .mode-btn.active { border-color: #7c3aed; color: #a78bfa; background: #1e1b3a; }
+
+    /* Loading indicator */
+    #loading {
+      font-size: 0.82rem;
+      color: #a78bfa;
+      padding-bottom: 0.75rem;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
   </style>
 </head>
 <body>
@@ -349,9 +377,13 @@
     </header>
 
     <section class="input-panel" aria-label="Task input">
+      <div class="mode-toggle" role="group" aria-label="Execution mode">
+        <button class="mode-btn active" id="mode-node">Node Workflow</button>
+        <button class="mode-btn" id="mode-pipeline">AI Pipeline</button>
+      </div>
       <label for="task-input">Describe your task or paste your code</label>
       <textarea id="task-input" placeholder="e.g. build a rate limiter middleware — or paste code to debug"></textarea>
-      <button id="run-btn" onclick="runWorkflowStream()">Run Workflow</button>
+      <button id="run-btn" onclick="runWorkflow()">Run Workflow</button>
     </section>
 
     <section class="pipeline-section" aria-label="Pipeline steps">
@@ -365,6 +397,7 @@
         <span id="output-label"></span>
       </div>
       <div class="output-box">
+        <div id="loading" style="display:none;" aria-live="polite">&#x1F916; Thinking...</div>
         <pre id="output-pre" class="muted">Click a step card to view its output.</pre>
       </div>
     </section>
