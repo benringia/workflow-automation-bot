@@ -2,193 +2,200 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Workflow Builder</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html {
-      min-height: 100vh;
-      overflow-y: auto;
+    :root {
+      --bg-base:      #0f172a;
+      --bg-card:      #1e293b;
+      --bg-sunken:    #0f172a;
+      --border:       #334155;
+      --accent:       #7c3aed;
+      --accent-light: #a78bfa;
+      --text-primary: #e2e8f0;
+      --text-muted:   #64748b;
+      --green:        #86efac;
+      --red:          #f87171;
+      --amber:        #fbbf24;
     }
+
+    html { min-height: 100vh; }
 
     body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
       min-height: 100vh;
-      overflow-y: auto;
-      background: #0f172a;
-      color: #e2e8f0;
-      font-family: monospace;
+      padding: 32px 16px 64px;
     }
 
-    main {
-      max-width: 960px;
+    /* Mode visibility — JS sets data-mode on <body> */
+    [data-mode="node"]     #pipeline-section { display: none; }
+    [data-mode="pipeline"] #node-section     { display: none; }
+
+    /* ── Layout ── */
+    .site-header { text-align: center; margin-bottom: 28px; }
+    .site-header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    .site-header .subtitle { color: var(--text-muted); font-size: 0.82rem; }
+
+    .main-content {
+      max-width: 720px;
       margin: 0 auto;
-      padding: 2rem 1.5rem;
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
-      overflow: visible;
-      gap: 2rem;
+      gap: 14px;
     }
 
-    /* Header */
-    header h1 {
-      font-size: 1.2rem;
-      color: #a78bfa;
-      letter-spacing: 0.05em;
-    }
-    header p {
-      margin-top: 0.3rem;
-      font-size: 0.8rem;
-      color: #475569;
-    }
-
-    /* Input */
-    .input-panel {
+    /* ── Mode toggle ── */
+    .mode-toggle {
       display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .input-panel label {
-      font-size: 0.8rem;
-      color: #94a3b8;
-    }
-
-    textarea {
-      width: 100%;
-      height: 120px;
-      padding: 0.85rem;
+      background: var(--bg-sunken);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      border: 1px solid #1e293b;
-      background: #1e293b;
-      color: #e2e8f0;
-      font-family: monospace;
-      font-size: 0.875rem;
-      resize: vertical;
-      line-height: 1.5;
+      padding: 4px;
+      gap: 4px;
     }
-    textarea:focus { outline: none; border-color: #7c3aed; }
-
-    button#run-btn {
-      align-self: flex-start;
-      padding: 0.65rem 1.5rem;
-      border-radius: 7px;
+    .mode-btn {
+      flex: 1;
+      padding: 8px 0;
       border: none;
-      background: #7c3aed;
-      color: #fff;
-      font-family: monospace;
-      font-size: 0.9rem;
-      font-weight: bold;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.83rem;
       cursor: pointer;
+      transition: background 0.15s, color 0.15s;
     }
-    button#run-btn:hover { background: #6d28d9; }
-    button#run-btn:disabled { background: #334155; cursor: not-allowed; }
+    .mode-btn.active { background: var(--accent); color: #fff; }
 
-    /* Pipeline */
-    .pipeline-section h2,
-    .output-section h2 {
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    /* ── Input card ── */
+    #task-input {
+      width: 100%;
+      background: var(--bg-sunken);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 12px;
+      resize: none;
+      min-height: 100px;
+      outline: none;
+      transition: border-color 0.15s;
+      display: block;
+    }
+    #task-input:focus { border-color: var(--accent); }
+
+    .input-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 9px 22px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover    { opacity: 0.88; }
+    .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* ── Error card ── */
+    .error-card {
+      background: #450a0a;
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--red);
+      font-size: 0.83rem;
+    }
+
+    /* ── Section title ── */
+    .section-title {
       font-size: 0.72rem;
-      color: #475569;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      margin-bottom: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 10px;
     }
 
-    #workflow {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
+    /* ── Step list ── */
+    .step-list { display: flex; flex-direction: column; gap: 8px; }
 
-    .connector {
-      color: #334155;
-      font-size: 1rem;
-      flex-shrink: 0;
-    }
-
-    /* Step cards */
     .step-card {
-      flex: 1;
-      min-width: 130px;
-      padding: 0.85rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      border: 1px solid #1e293b;
-      background: #1e293b;
-      cursor: pointer;
-      transition: border-color 0.15s, opacity 0.15s;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .step-card:hover { border-color: #475569; }
-    .step-card.selected { border-color: #a78bfa; }
-    .step-card.running  { border-color: #f59e0b; }
-    .step-card.done     { border-color: #22c55e; }
-    .step-card.error    { border-color: #ef4444; }
-    .step-card.disabled { opacity: 0.4; cursor: default; }
-    .step-card.disabled:hover { border-color: #1e293b; }
-
-    .card-top {
+      padding: 12px 14px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
     }
+    .step-card:hover    { border-color: #475569; }
+    .step-card.selected { border-color: var(--accent); }
+    .step-card.running  { border-color: var(--amber); }
+    .step-card.done     { border-color: var(--green); }
+    .step-card.error    { border-color: var(--red); }
+    .step-card.disabled { opacity: 0.45; }
+    .step-card.disabled:hover { border-color: var(--border); }
 
-    .step-label {
-      font-size: 0.85rem;
-      font-weight: bold;
-      color: #e2e8f0;
-    }
+    .card-top { flex: 1; display: flex; align-items: center; gap: 10px; }
+    .step-label { flex: 1; font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
 
-    .step-badge {
+    /* ── Badges ── */
+    .badge {
       font-size: 0.68rem;
-      padding: 0.15rem 0.5rem;
+      padding: 2px 8px;
       border-radius: 999px;
-      width: fit-content;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
+    .badge-pending { background: var(--bg-sunken); color: var(--text-muted); border: 1px solid var(--border); }
+    .badge-running { background: #451a03; color: var(--amber); animation: pulse 1.4s ease-in-out infinite; }
+    .badge-done    { background: #14532d; color: var(--green); }
+    .badge-error   { background: #450a0a; color: var(--red); }
+    .badge-off     { background: var(--bg-sunken); color: var(--text-muted); border: 1px solid var(--border); }
 
-    .step-badge.pending { background: #0f172a; color: #64748b; border: 1px solid #334155; }
-    .step-badge.running { background: #78350f; color: #fcd34d; animation: pulse 1s infinite; }
-    .step-badge.done    { background: #14532d; color: #86efac; }
-    .step-badge.error   { background: #7f1d1d; color: #fca5a5; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0; }
-    }
-
-    /* Reorder buttons */
-    .move-btns {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      flex-shrink: 0;
-    }
-
+    /* ── Move buttons ── */
+    .move-btns { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
     .move-btn {
       background: none;
       border: none;
-      color: #475569;
-      font-size: 0.6rem;
+      color: var(--text-muted);
+      font-size: 0.62rem;
       line-height: 1;
-      padding: 1px 3px;
+      padding: 1px 4px;
       cursor: pointer;
       border-radius: 3px;
-      font-family: monospace;
+      font-family: inherit;
+      transition: color 0.1s;
     }
-
-    .move-btn:hover { color: #a78bfa; background: #1e3a5f22; }
+    .move-btn:hover    { color: var(--text-primary); }
     .move-btn:disabled { opacity: 0; pointer-events: none; }
 
-    /* Toggle */
+    /* ── Toggle switch ── */
     .toggle {
       position: relative;
       display: inline-flex;
@@ -196,176 +203,235 @@
       cursor: pointer;
       flex-shrink: 0;
     }
-
-    .toggle input {
-      position: absolute;
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
+    .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
     .toggle-track {
       display: block;
       width: 28px;
       height: 16px;
       border-radius: 999px;
-      background: #334155;
+      background: var(--border);
       position: relative;
       transition: background 0.2s;
     }
-
     .toggle-track::after {
       content: '';
       position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 12px;
-      height: 12px;
+      top: 2px; left: 2px;
+      width: 12px; height: 12px;
       border-radius: 50%;
-      background: #64748b;
+      background: var(--text-muted);
       transition: transform 0.2s, background 0.2s;
     }
+    .toggle input:checked + .toggle-track        { background: var(--accent); }
+    .toggle input:checked + .toggle-track::after { transform: translateX(12px); background: #fff; }
 
-    .toggle input:checked + .toggle-track { background: #7c3aed; }
-    .toggle input:checked + .toggle-track::after {
-      transform: translateX(12px);
-      background: #fff;
-    }
+    /* ── Pipeline section ── */
+    #pipeline-section { display: flex; flex-direction: column; }
 
-    /* Output */
-    .output-section {
+    .tab-bar {
       display: flex;
-      flex-direction: column;
-      margin-bottom: 20px;
-      line-height: 1.6;
+      background: var(--bg-sunken);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      padding: 4px;
+      gap: 4px;
     }
-
-    .output-section h2,
-    .output-section h3 {
-      font-size: 0.9rem;
-      color: #a78bfa;
-      margin-bottom: 0.4rem;
-    }
-
-    .code-block {
-      margin-top: 10px;
-    }
-
-    #output-pre pre {
-      background: #0d1117;
-      padding: 12px;
-      border-radius: 8px;
-      overflow-x: auto;
-    }
-
-    #output-pre code {
-      font-family: monospace;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    .toggle-btn {
-      background: #7c3aed;
-      color: white;
+    .tab-btn {
+      flex: 1;
+      padding: 6px 0;
       border: none;
-      padding: 6px 10px;
-      margin-bottom: 6px;
-      cursor: pointer;
-      border-radius: 6px;
-      font-family: monospace;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
       font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
     }
+    .tab-btn.active { background: var(--accent); color: #fff; }
 
-    .toggle-btn:hover {
-      background: #6d28d9;
+    .tab-panels {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 0 0 8px 8px;
+      min-height: 180px;
     }
+    .tab-panel        { display: none; padding: 16px; }
+    .tab-panel.active { display: block; }
 
+    /* ── Code blocks ── */
+    .code-block { margin: 8px 0; }
+    .code-block pre {
+      background: var(--bg-sunken);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      overflow-x: auto;
+      font-family: inherit;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre;
+    }
+    .toggle-btn {
+      background: #1e1b3a;
+      border: 1px solid var(--accent);
+      color: var(--accent-light);
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      margin-bottom: 4px;
+    }
+    .toggle-btn:hover { background: #2d1b6e; }
+    .hidden { display: none !important; }
+
+    /* ── Output card (node mode) ── */
+    #output-section .card { overflow: hidden; }
     .output-header {
       display: flex;
-      align-items: baseline;
-      gap: 0.75rem;
-      margin-bottom: 0.5rem;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
     }
+    #output-step-name { font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
 
-    #output-label {
-      font-size: 0.85rem;
-      color: #94a3b8;
-      font-weight: bold;
-    }
-
-    .output-box {
-      border: 1px solid #1e293b;
-      border-radius: 8px;
-      background: #0f172a;
-      padding: 1rem;
-      min-height: 200px;
-      height: auto;
-      overflow: visible;
-    }
-
-    #output-pre {
+    .output-body {
+      max-height: 420px;
+      overflow-y: auto;
+      font-size: 0.83rem;
+      line-height: 1.7;
+      color: var(--text-primary);
       white-space: pre-wrap;
       word-break: break-word;
-      display: block;
-      height: auto !important;
-      max-height: none !important;
-      overflow: visible !important;
-      font-size: 0.82rem;
-      color: #cbd5e1;
-      line-height: 1.65;
-      padding-bottom: 2rem;
     }
+    .output-body.muted { color: var(--text-muted); }
+    .output-body .output-section             { margin-bottom: 18px; line-height: 1.65; }
+    .output-body .output-section h2,
+    .output-body .output-section h3          { font-size: 0.88rem; color: var(--accent-light); margin-bottom: 6px; }
 
-    #output-pre.muted { color: #475569; }
-    #output-pre.error-text { color: #f87171; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    .output-body.streaming::after {
+      content: '\u2588';
+      color: var(--accent);
+      animation: blink 0.8s step-start infinite;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .output-body.fade-in { animation: fadeIn 0.2s ease-out; }
 
-    #output-pre::after {
-      content: '█';
-      display: none;
-      color: #a78bfa;
-      animation: blink 1s step-start infinite;
+    /* ── Validation ── */
+    .validation-progress      { margin-bottom: 16px; }
+    .validation-progress-label {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      margin-bottom: 5px;
     }
-    #output-pre.streaming::after {
-      display: inline;
+    .progress-bar-track { background: var(--bg-sunken); border-radius: 4px; height: 6px; overflow: hidden; }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-light));
+      transition: width 0.4s ease;
     }
+    .validation-list { list-style: none; display: flex; flex-direction: column; }
+    .validation-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.83rem;
+    }
+    .validation-item:last-child { border-bottom: none; }
+    .validation-icon {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem;
+      flex-shrink: 0;
+    }
+    .validation-icon.pass { background: #14532d; color: var(--green); }
+    .validation-icon.fail { background: #450a0a; color: var(--red); }
+    .validation-rule { color: var(--text-muted); }
 
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
-    }
-    #output-pre.fade-in {
-      animation: fadeIn 0.2s ease-out;
-    }
+    /* ── Helpers ── */
+    .empty-state { color: var(--text-muted); font-size: 0.83rem; text-align: center; padding: 28px 0; }
+    .muted       { color: var(--text-muted); }
+    .error-text  { color: var(--red); }
   </style>
 </head>
-<body>
-  <main>
+<body data-mode="node">
 
-    <header>
-      <h1>AI Workflow Builder</h1>
-      <p>Type your request — intent is detected automatically. Toggle steps to include or exclude them.</p>
-    </header>
+  <header class="site-header">
+    <h1>AI Workflow Builder</h1>
+    <p class="subtitle">Describe a task — intent is detected automatically</p>
+  </header>
 
-    <section class="input-panel" aria-label="Task input">
-      <label for="task-input">Describe your task or paste your code</label>
-      <textarea id="task-input" placeholder="e.g. build a rate limiter middleware — or paste code to debug"></textarea>
-      <button id="run-btn" onclick="runWorkflowStream()">Run Workflow</button>
-    </section>
+  <main class="main-content">
 
-    <section class="pipeline-section" aria-label="Pipeline steps">
-      <h2>Pipeline</h2>
-      <div id="workflow" role="list"></div>
-    </section>
+    <!-- Mode toggle -->
+    <div class="mode-toggle" role="group" aria-label="Execution mode">
+      <button class="mode-btn active" id="btn-node">Node Workflow</button>
+      <button class="mode-btn"        id="btn-pipeline">AI Pipeline</button>
+    </div>
 
-    <section class="output-section" aria-label="Step output">
-      <div class="output-header">
-        <h2>Output</h2>
-        <span id="output-label"></span>
+    <!-- Input card -->
+    <div class="card input-card">
+      <textarea
+        id="task-input"
+        placeholder="Describe your task or paste code&#8230;"
+        aria-label="Task input"
+      ></textarea>
+      <div class="input-actions">
+        <button id="run-btn" class="btn-primary">&#9654; Run Workflow</button>
       </div>
-      <div class="output-box">
-        <pre id="output-pre" class="muted">Click a step card to view its output.</pre>
+    </div>
+
+    <!-- Error card (hidden by default) -->
+    <div class="error-card" id="error-card" hidden>
+      <span id="error-message"></span>
+    </div>
+
+    <!-- Node section -->
+    <section id="node-section" aria-label="Workflow steps">
+      <h2 class="section-title">Steps</h2>
+      <div class="step-list" id="step-list"></div>
+    </section>
+
+    <!-- Pipeline section -->
+    <section id="pipeline-section" aria-label="AI Pipeline output">
+      <div class="tab-bar" role="tablist" aria-label="Output tabs">
+        <button class="tab-btn active" data-tab="code"       role="tab" aria-selected="true" >Code</button>
+        <button class="tab-btn"        data-tab="docs"       role="tab" aria-selected="false">Docs</button>
+        <button class="tab-btn"        data-tab="tests"      role="tab" aria-selected="false">Tests</button>
+        <button class="tab-btn"        data-tab="validation" role="tab" aria-selected="false">Validation</button>
+      </div>
+      <div class="tab-panels">
+        <div class="tab-panel active" id="panel-code"       role="tabpanel"><p class="empty-state">Run a pipeline to see generated code.</p></div>
+        <div class="tab-panel"        id="panel-docs"       role="tabpanel"><p class="empty-state">Run a pipeline to see generated docs.</p></div>
+        <div class="tab-panel"        id="panel-tests"      role="tabpanel"><p class="empty-state">Run a pipeline to see generated tests.</p></div>
+        <div class="tab-panel"        id="panel-validation" role="tabpanel"><p class="empty-state">Run a pipeline to see validation results.</p></div>
+      </div>
+    </section>
+
+    <!-- Output section (node mode results) -->
+    <section id="output-section" hidden aria-label="Step output">
+      <div class="card">
+        <div class="output-header">
+          <span id="output-step-name"></span>
+          <span id="output-status-badge" class="badge badge-pending">pending</span>
+        </div>
+        <div class="output-body muted" id="output-body" aria-live="polite">
+          Click a step to view output.
+        </div>
       </div>
     </section>
 
