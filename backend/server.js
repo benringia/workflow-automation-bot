@@ -25,6 +25,7 @@ app.post('/explain-code', explainCodeController.handleExplainCode);
 app.post('/route', routeController.handleRoute);
 app.post('/route-stream', routeStreamController.handleRouteStream);
 app.post('/workflow/run', workflowController.handleWorkflowRun);
+app.post('/workflow/generate', workflowController.handleWorkflowGenerate);
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
