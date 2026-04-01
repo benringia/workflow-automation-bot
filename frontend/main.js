@@ -3,8 +3,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 const API_BASE = 'https://workflow-automation-bot-production-8cec.up.railway.app';
 
-let mode = 'node';
-
 const STEP_NAMES = {
     'generate-feature': 'Generate Feature',
     'debug':            'Debug',
@@ -55,7 +53,12 @@ const tabBtns        = document.querySelectorAll('.tab-btn');
 // UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return str
+        .replace(/&/g,  '&amp;')
+        .replace(/</g,  '&lt;')
+        .replace(/>/g,  '&gt;')
+        .replace(/"/g,  '&quot;')
+        .replace(/'/g,  '&#x27;');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,6 +66,7 @@ function escapeHtml(str) {
 // ─────────────────────────────────────────────────────────────────────────────
 function setMode(m) {
     mode = m;
+    clearTyping();
     document.body.dataset.mode = m;
     btnNode.classList.toggle('active', m === 'node');
     btnPipeline.classList.toggle('active', m === 'pipeline');
@@ -73,7 +77,7 @@ function setMode(m) {
     if (m === 'node') {
         steps = steps.map(s => ({ ...s, status: 'pending', result: null }));
         selectedStep = null;
-        renderSteps(); // defined in Task 4
+        renderSteps();
     }
 }
 
@@ -230,16 +234,18 @@ function renderSteps() {
         const badgeClass = step.enabled ? `badge-${step.status}` : 'badge-off';
         const badgeText  = step.enabled ? step.status : 'off';
 
+        const upDisabled   = i === 0 || isRunning ? 'disabled' : '';
+        const downDisabled = i === steps.length - 1 || isRunning ? 'disabled' : '';
         card.innerHTML = `
             <div class="card-top">
                 <span class="step-label">${step.label}</span>
                 <span class="badge ${badgeClass}">${badgeText}</span>
                 <div class="move-btns">
-                    <button class="move-btn" data-move="up"   data-id="${step.id}" title="Move up"   ${i === 0 ? 'disabled' : ''}>&#9650;</button>
-                    <button class="move-btn" data-move="down" data-id="${step.id}" title="Move down" ${i === steps.length - 1 ? 'disabled' : ''}>&#9660;</button>
+                    <button class="move-btn" data-move="up"   data-id="${step.id}" title="Move up"   ${upDisabled}>&#9650;</button>
+                    <button class="move-btn" data-move="down" data-id="${step.id}" title="Move down" ${downDisabled}>&#9660;</button>
                 </div>
                 <label class="toggle" title="${step.enabled ? 'Disable' : 'Enable'} step">
-                    <input type="checkbox" ${step.enabled ? 'checked' : ''} data-id="${step.id}" />
+                    <input type="checkbox" ${step.enabled ? 'checked' : ''} data-id="${step.id}" ${isRunning ? 'disabled' : ''} />
                     <span class="toggle-track"></span>
                 </label>
             </div>
@@ -328,36 +334,6 @@ function setActiveTab(tab) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SSE HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-function parseSSEEvent(rawEvent, handlers) {
-    let eventType = 'message';
-    let dataLine  = '';
-    for (const line of rawEvent.split('\n')) {
-        if (line.startsWith('event: ')) eventType = line.slice(7).trim();
-        if (line.startsWith('data: '))  dataLine  = line.slice(6).trim();
-    }
-    if (!dataLine) return;
-    try { handlers[eventType]?.(JSON.parse(dataLine)); } catch { /* malformed — skip */ }
-}
-
-async function readSSEStream(response, handlers) {
-    const reader  = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer    = '';
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let boundary;
-        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-            parseSSEEvent(buffer.slice(0, boundary), handlers);
-            buffer = buffer.slice(boundary + 2);
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // NODE WORKFLOW
 // ─────────────────────────────────────────────────────────────────────────────
 function buildActiveNodes() {
@@ -405,6 +381,10 @@ async function runNodeWorkflow() {
         const data = await response.json();
         if (!data.success) throw new Error(data.error || 'Workflow failed');
 
+        // Null selectedStep during result population so setStepStatus doesn't
+        // re-trigger selectStep and abort any in-progress typing animation.
+        const prevSelected = selectedStep;
+        selectedStep = null;
         let firstStep = null;
         nodes.forEach(node => {
             const stepId = nodeStepMap[node.id];
@@ -416,6 +396,7 @@ async function runNodeWorkflow() {
                 setStepStatus(stepId, 'error', result?.error || 'No output');
             }
         });
+        selectedStep = prevSelected;
 
         if (firstStep) {
             const step = steps.find(s => s.id === firstStep);
@@ -430,8 +411,11 @@ async function runNodeWorkflow() {
             enqueueText(step.result, () => {
                 renderOutput(step.result, outputBody);
                 outputBody.className = 'output-body fade-in';
+                setLoading(false);
             });
             renderSteps();
+        } else {
+            setLoading(false);
         }
     } catch (err) {
         console.error('Workflow error:', err);
@@ -439,7 +423,6 @@ async function runNodeWorkflow() {
         steps.forEach(s => {
             if (s.status === 'running') setStepStatus(s.id, 'error', 'Workflow ended unexpectedly');
         });
-    } finally {
         setLoading(false);
     }
 }
@@ -471,7 +454,9 @@ function renderPipelinePanel(tab, content) {
 
 function renderValidation(validation) {
     const panel    = document.getElementById('panel-validation');
-    const allRules = validation ? Object.values(validation).flat() : [];
+    const allRules = validation
+        ? Object.values(validation).flatMap(v => Array.isArray(v) ? v : [])
+        : [];
 
     if (allRules.length === 0) {
         panel.innerHTML = `<p class="empty-state">No validation rules defined.</p>`;
