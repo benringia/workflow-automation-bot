@@ -101,3 +101,111 @@ function setLoading(active) {
         runBtn.textContent = mode === 'pipeline' ? '\u25BA Generate Outputs' : '\u25BA Run Workflow';
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OUTPUT FORMATTING
+// ─────────────────────────────────────────────────────────────────────────────
+function renderCodeBlocks(escaped) {
+    return escaped.replace(/```(\w*)?\n([\s\S]*?)```/g, (_, lang, code) =>
+        `<div class="code-block">` +
+        `<button class="toggle-btn">Hide Code</button>` +
+        `<pre><code class="lang-${lang || ''}">${code}</code></pre>` +
+        `</div>`
+    );
+}
+
+function formatOutput(text) {
+    const lines    = text.split('\n');
+    const sections = [];
+    let current    = null;
+
+    for (const line of lines) {
+        const match = line.match(/^(#{1,2})\s+(.+)/);
+        if (match) {
+            if (current) sections.push(current);
+            current = { title: match[2], level: match[1].length, lines: [] };
+        } else {
+            if (!current) current = { title: null, lines: [] };
+            current.lines.push(line);
+        }
+    }
+    if (current) sections.push(current);
+
+    return sections.map(section => {
+        const content = renderCodeBlocks(escapeHtml(section.lines.join('\n')));
+        if (section.title) {
+            const tag = section.level === 1 ? 'h2' : 'h3';
+            return `<div class="output-section"><${tag}>${escapeHtml(section.title)}</${tag}><div>${content}</div></div>`;
+        }
+        return `<div class="output-section"><div>${content}</div></div>`;
+    }).join('');
+}
+
+function isTruncated(text) {
+    if (!text || text.length < 1000) return false;
+    const t = text.trim();
+    return !t.endsWith('}') && !t.endsWith('```') && !t.endsWith('.') && !t.endsWith('!') && !t.endsWith('?');
+}
+
+function renderOutput(text, el) {
+    el.classList.remove('streaming');
+    el.innerHTML = formatOutput(text);
+    if (isTruncated(text)) {
+        el.innerHTML += '<span class="muted">\n\n[Response may be truncated]</span>';
+    }
+    el.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const pre    = btn.nextElementSibling;
+            const hidden = pre.classList.toggle('hidden');
+            btn.textContent = hidden ? 'Show Code' : 'Hide Code';
+        });
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPING ENGINE (node mode only)
+// ─────────────────────────────────────────────────────────────────────────────
+let typingQueue        = '';
+let typingActive       = false;
+let typingAborted      = false;
+let charsRendered      = 0;
+let typingDoneCallback = null;
+
+function clearTyping() {
+    typingAborted      = true;
+    typingActive       = false;
+    typingQueue        = '';
+    charsRendered      = 0;
+    typingDoneCallback = null;
+    outputBody.classList.remove('streaming');
+}
+
+function enqueueText(text, onDone) {
+    typingAborted      = false;
+    typingDoneCallback = onDone || null;
+    typingQueue       += text;
+    if (!typingActive) processQueue();
+}
+
+function processQueue() {
+    if (typingAborted || typingQueue.length === 0) {
+        typingActive = false;
+        if (!typingAborted && typingDoneCallback) {
+            const cb = typingDoneCallback;
+            typingDoneCallback = null;
+            cb();
+        }
+        return;
+    }
+    typingActive = true;
+    if (outputBody.textContent.length > 15000) {
+        outputBody.textContent = outputBody.textContent.slice(-15000);
+    }
+    outputBody.textContent += typingQueue[0];
+    typingQueue = typingQueue.slice(1);
+    charsRendered++;
+    if (charsRendered % 20 === 0) {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
+    }
+    setTimeout(processQueue, 5);
+}
