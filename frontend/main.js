@@ -209,3 +209,106 @@ function processQueue() {
     }
     setTimeout(processQueue, 5);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEPS (node mode)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderSteps() {
+    stepListEl.innerHTML = '';
+    steps.forEach((step, i) => {
+        const card = document.createElement('div');
+        card.className = [
+            'step-card',
+            step.enabled ? '' : 'disabled',
+            step.status !== 'pending' ? step.status : '',
+            selectedStep === step.id ? 'selected' : ''
+        ].filter(Boolean).join(' ');
+        card.id = `card-${step.id}`;
+
+        const badgeClass = step.enabled ? `badge-${step.status}` : 'badge-off';
+        const badgeText  = step.enabled ? step.status : 'off';
+
+        card.innerHTML = `
+            <div class="card-top">
+                <span class="step-label">${step.label}</span>
+                <span class="badge ${badgeClass}">${badgeText}</span>
+                <div class="move-btns">
+                    <button class="move-btn" data-move="up"   data-id="${step.id}" title="Move up"   ${i === 0 ? 'disabled' : ''}>&#9650;</button>
+                    <button class="move-btn" data-move="down" data-id="${step.id}" title="Move down" ${i === steps.length - 1 ? 'disabled' : ''}>&#9660;</button>
+                </div>
+                <label class="toggle" title="${step.enabled ? 'Disable' : 'Enable'} step">
+                    <input type="checkbox" ${step.enabled ? 'checked' : ''} data-id="${step.id}" />
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+        `;
+
+        card.addEventListener('click', e => {
+            if (e.target.closest('.toggle') || e.target.closest('.move-btns')) return;
+            selectStep(step.id);
+        });
+
+        card.querySelectorAll('.move-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                moveStep(btn.dataset.id, btn.dataset.move);
+            });
+        });
+
+        card.querySelector('input[type="checkbox"]').addEventListener('change', e => {
+            const target = steps.find(s => s.id === e.target.dataset.id);
+            if (target) { target.enabled = e.target.checked; renderSteps(); }
+        });
+
+        stepListEl.appendChild(card);
+    });
+}
+
+function moveStep(id, direction) {
+    const idx = steps.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= steps.length) return;
+    [steps[idx], steps[swapIdx]] = [steps[swapIdx], steps[idx]];
+    renderSteps();
+}
+
+function setStepStatus(id, status, result = null) {
+    const step = steps.find(s => s.id === id);
+    if (!step) return;
+    step.status = status;
+    if (result !== null) step.result = result;
+    renderSteps();
+    if (selectedStep === id) selectStep(id);
+}
+
+function selectStep(id) {
+    clearTyping();
+    selectedStep = id;
+    renderSteps();
+
+    const step = steps.find(s => s.id === id);
+    outputSection.hidden = false;
+    outputStepName.textContent = step ? step.label : '';
+    outputBadge.className  = `badge badge-${step?.status || 'pending'}`;
+    outputBadge.textContent = step?.status || 'pending';
+
+    if (!step) return;
+
+    if (!step.enabled) {
+        outputBody.className = 'output-body muted';
+        outputBody.textContent = 'Step is disabled.';
+    } else if (step.result) {
+        outputBody.className = `output-body fade-in${step.status === 'error' ? ' error-text' : ''}`;
+        renderOutput(step.result, outputBody);
+    } else if (step.status === 'running') {
+        outputBody.className = 'output-body muted';
+        outputBody.textContent = 'Running\u2026';
+    } else {
+        outputBody.className = 'output-body muted';
+        outputBody.textContent = 'No result yet.';
+    }
+}
+
+// Bootstrap
+renderSteps();
