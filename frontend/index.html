@@ -85,6 +85,13 @@
     }
 
     /* ── Input card ── */
+    .input-label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
     #task-input {
       width: 100%;
       background: var(--bg-sunken);
@@ -117,6 +124,15 @@
     }
     .btn-primary:hover    { opacity: 0.88; }
     .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .mode-btn:focus-visible,
+    .btn-primary:focus-visible,
+    .tab-btn:focus-visible,
+    .move-btn:focus-visible,
+    .toggle-btn:focus-visible {
+      outline: 2px solid var(--accent-light);
+      outline-offset: 2px;
+    }
 
     /* ── Error card ── */
     .error-card {
@@ -385,10 +401,10 @@
 
     <!-- Input card -->
     <div class="card input-card">
+      <label for="task-input" class="input-label">Describe your task or paste code</label>
       <textarea
         id="task-input"
-        placeholder="Describe your task or paste code&#8230;"
-        aria-label="Task input"
+        placeholder="e.g. build a rate limiter middleware&#8230;"
       ></textarea>
       <div class="input-actions">
         <button id="run-btn" class="btn-primary">&#9654; Run Workflow</button>
@@ -409,16 +425,16 @@
     <!-- Pipeline section -->
     <section id="pipeline-section" aria-label="AI Pipeline output">
       <div class="tab-bar" role="tablist" aria-label="Output tabs">
-        <button class="tab-btn active" data-tab="code"       role="tab" aria-selected="true" >Code</button>
-        <button class="tab-btn"        data-tab="docs"       role="tab" aria-selected="false">Docs</button>
-        <button class="tab-btn"        data-tab="tests"      role="tab" aria-selected="false">Tests</button>
-        <button class="tab-btn"        data-tab="validation" role="tab" aria-selected="false">Validation</button>
+        <button class="tab-btn active" id="tab-code"       data-tab="code"       role="tab" aria-selected="true"  aria-controls="panel-code">Code</button>
+        <button class="tab-btn"        id="tab-docs"       data-tab="docs"       role="tab" aria-selected="false" aria-controls="panel-docs">Docs</button>
+        <button class="tab-btn"        id="tab-tests"      data-tab="tests"      role="tab" aria-selected="false" aria-controls="panel-tests">Tests</button>
+        <button class="tab-btn"        id="tab-validation" data-tab="validation" role="tab" aria-selected="false" aria-controls="panel-validation">Validation</button>
       </div>
       <div class="tab-panels">
-        <div class="tab-panel active" id="panel-code"       role="tabpanel"><p class="empty-state">Run a pipeline to see generated code.</p></div>
-        <div class="tab-panel"        id="panel-docs"       role="tabpanel"><p class="empty-state">Run a pipeline to see generated docs.</p></div>
-        <div class="tab-panel"        id="panel-tests"      role="tabpanel"><p class="empty-state">Run a pipeline to see generated tests.</p></div>
-        <div class="tab-panel"        id="panel-validation" role="tabpanel"><p class="empty-state">Run a pipeline to see validation results.</p></div>
+        <div class="tab-panel active" id="panel-code"       role="tabpanel" aria-labelledby="tab-code"><p class="empty-state">Run a pipeline to see generated code.</p></div>
+        <div class="tab-panel"        id="panel-docs"       role="tabpanel" aria-labelledby="tab-docs"><p class="empty-state">Run a pipeline to see generated docs.</p></div>
+        <div class="tab-panel"        id="panel-tests"      role="tabpanel" aria-labelledby="tab-tests"><p class="empty-state">Run a pipeline to see generated tests.</p></div>
+        <div class="tab-panel"        id="panel-validation" role="tabpanel" aria-labelledby="tab-validation"><p class="empty-state">Run a pipeline to see validation results.</p></div>
       </div>
     </section>
 
