@@ -310,5 +310,22 @@ function selectStep(id) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TABS (pipeline mode)
+// ─────────────────────────────────────────────────────────────────────────────
+function setActiveTab(tab) {
+    activeTab = tab;
+    tabBtns.forEach(btn => {
+        const isActive = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `panel-${tab}`);
+    });
+}
+
 // Bootstrap
 renderSteps();
+setMode('node');
+tabBtns.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
