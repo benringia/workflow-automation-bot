@@ -442,6 +442,105 @@ async function runNodeWorkflow() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PIPELINE
+// ─────────────────────────────────────────────────────────────────────────────
+function clearTabPanels() {
+    ['code', 'docs', 'tests', 'validation'].forEach(tab => {
+        document.getElementById(`panel-${tab}`).innerHTML = `<p class="empty-state">Generating\u2026</p>`;
+    });
+}
+
+function renderPipelinePanel(tab, content) {
+    const panel = document.getElementById(`panel-${tab}`);
+    if (content) {
+        panel.innerHTML = formatOutput(content);
+        panel.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const pre    = btn.nextElementSibling;
+                const hidden = pre.classList.toggle('hidden');
+                btn.textContent = hidden ? 'Show Code' : 'Hide Code';
+            });
+        });
+    } else {
+        panel.innerHTML = `<p class="empty-state">Not generated.</p>`;
+    }
+}
+
+function renderValidation(validation) {
+    const panel    = document.getElementById('panel-validation');
+    const allRules = validation ? Object.values(validation).flat() : [];
+
+    if (allRules.length === 0) {
+        panel.innerHTML = `<p class="empty-state">No validation rules defined.</p>`;
+        return;
+    }
+
+    const passed = allRules.filter(r => r.status === 'PASS').length;
+    const total  = allRules.length;
+    const pct    = Math.round((passed / total) * 100);
+
+    const listItems = allRules.map(r => {
+        const pass = r.status === 'PASS';
+        return `
+            <li class="validation-item">
+                <span class="validation-icon ${pass ? 'pass' : 'fail'}">${pass ? '&#10003;' : '&#10007;'}</span>
+                <span class="validation-rule">${escapeHtml(r.rule)}</span>
+            </li>`;
+    }).join('');
+
+    panel.innerHTML = `
+        <div class="validation-progress">
+            <div class="validation-progress-label">
+                <span>${passed} of ${total} rules passed</span>
+                <span>${pct}%</span>
+            </div>
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill" style="width: ${pct}%"></div>
+            </div>
+        </div>
+        <ul class="validation-list">${listItems}</ul>`;
+}
+
+function renderPipelineResult(result) {
+    const { outputs = {}, validation } = result;
+    renderPipelinePanel('code',  outputs.code);
+    renderPipelinePanel('docs',  outputs.docs);
+    renderPipelinePanel('tests', outputs.tests);
+    renderValidation(validation);
+    setActiveTab('code');
+}
+
+async function runPipeline() {
+    const input = taskInput.value.trim();
+    if (!input) { taskInput.focus(); return; }
+
+    setLoading(true);
+    clearTabPanels();
+    setActiveTab('code');
+
+    try {
+        const res = await fetch(`${API_BASE}/workflow/generate`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ data: { description: input }, rules: PIPELINE_RULES })
+        });
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const result = await res.json();
+        if (!result.success) throw new Error(result.error || 'Pipeline failed');
+        renderPipelineResult(result);
+    } catch (err) {
+        console.error('Pipeline error:', err);
+        showError(err.message);
+        ['code', 'docs', 'tests', 'validation'].forEach(tab => {
+            document.getElementById(`panel-${tab}`).innerHTML =
+                `<p class="error-text">Error: ${escapeHtml(err.message)}</p>`;
+        });
+    } finally {
+        setLoading(false);
+    }
+}
+
 // Bootstrap
 renderSteps();
 setMode('node');
