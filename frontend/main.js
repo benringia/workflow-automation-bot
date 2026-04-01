@@ -1,59 +1,125 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────────────────────────────────────────
 const API_BASE = 'https://workflow-automation-bot-production-8cec.up.railway.app';
 
 let mode = 'node';
 
 const STEP_NAMES = {
-    'generate-feature': 'Generate',
-    'debug':            'Analyze',
+    'generate-feature': 'Generate Feature',
+    'debug':            'Debug',
     'refactor':         'Refactor',
-    'explain-code':     'Explain'
+    'explain-code':     'Explain Code'
 };
 
-// Normalize backend step IDs to frontend IDs if they ever diverge
-const STEP_ID_NORMALIZE = {
-    'analyze':          'debug',
-    'generate':         'generate-feature',
-    'explain':          'explain-code'
+const STEP_NODE_TYPE = {
+    'generate-feature': 'ai.generate',
+    'debug':            'ai.debug',
+    'refactor':         'ai.refactor',
+    'explain-code':     'ai.explain'
 };
 
-const DEFAULT_STEPS = [
-    { id: 'generate-feature', label: STEP_NAMES['generate-feature'], enabled: true },
-    { id: 'debug',            label: STEP_NAMES['debug'],            enabled: true },
-    { id: 'refactor',         label: STEP_NAMES['refactor'],         enabled: true },
-    { id: 'explain-code',     label: STEP_NAMES['explain-code'],     enabled: true }
+const PIPELINE_RULES = ['no console logs', 'use async/await'];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let mode = 'node';
+let steps = [
+    { id: 'generate-feature', label: STEP_NAMES['generate-feature'], enabled: true, status: 'pending', result: null },
+    { id: 'debug',            label: STEP_NAMES['debug'],            enabled: true, status: 'pending', result: null },
+    { id: 'refactor',         label: STEP_NAMES['refactor'],         enabled: true, status: 'pending', result: null },
+    { id: 'explain-code',     label: STEP_NAMES['explain-code'],     enabled: true, status: 'pending', result: null }
 ];
-
-let steps = DEFAULT_STEPS.map(s => ({ ...s, status: 'pending', result: null }));
 let selectedStep = null;
-let workflowResults = [];
+let activeTab    = 'code';
+let isRunning    = false;
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM REFS
+// ─────────────────────────────────────────────────────────────────────────────
+const btnNode        = document.getElementById('btn-node');
+const btnPipeline    = document.getElementById('btn-pipeline');
+const taskInput      = document.getElementById('task-input');
+const runBtn         = document.getElementById('run-btn');
+const errorCard      = document.getElementById('error-card');
+const errorMessage   = document.getElementById('error-message');
+const stepListEl     = document.getElementById('step-list');
+const outputSection  = document.getElementById('output-section');
+const outputStepName = document.getElementById('output-step-name');
+const outputBadge    = document.getElementById('output-status-badge');
+const outputBody     = document.getElementById('output-body');
+const tabBtns        = document.querySelectorAll('.tab-btn');
 
-function showLoading() {
-    document.getElementById('loading').style.display = 'block';
-}
-
-function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
 function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MODE
+// ─────────────────────────────────────────────────────────────────────────────
+function setMode(m) {
+    mode = m;
+    document.body.dataset.mode = m;
+    btnNode.classList.toggle('active', m === 'node');
+    btnPipeline.classList.toggle('active', m === 'pipeline');
+    runBtn.textContent = m === 'pipeline' ? '\u25BA Generate Outputs' : '\u25BA Run Workflow';
+    clearError();
+    outputSection.hidden = true;
+    outputBody.textContent = '';
+    if (m === 'node') {
+        steps = steps.map(s => ({ ...s, status: 'pending', result: null }));
+        selectedStep = null;
+        renderSteps(); // defined in Task 4
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ERROR STATE
+// ─────────────────────────────────────────────────────────────────────────────
+function showError(msg) {
+    errorMessage.textContent = msg;
+    errorCard.hidden = false;
+}
+
+function clearError() {
+    errorCard.hidden = true;
+    errorMessage.textContent = '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOADING STATE
+// ─────────────────────────────────────────────────────────────────────────────
+function setLoading(active) {
+    isRunning = active;
+    runBtn.disabled = active;
+    if (active) {
+        runBtn.textContent = '\u23F3 Running\u2026';
+        clearError();
+    } else {
+        runBtn.textContent = mode === 'pipeline' ? '\u25BA Generate Outputs' : '\u25BA Run Workflow';
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OUTPUT FORMATTING
+// ─────────────────────────────────────────────────────────────────────────────
 function renderCodeBlocks(escaped) {
     return escaped.replace(/```(\w*)?\n([\s\S]*?)```/g, (_, lang, code) =>
         `<div class="code-block">` +
-        `<button class="toggle-btn">Show Code</button>` +
-        `<pre class="hidden"><code class="lang-${lang || ''}">${code}</code></pre>` +
+        `<button class="toggle-btn">Hide Code</button>` +
+        `<pre><code class="lang-${lang || ''}">${code}</code></pre>` +
         `</div>`
     );
 }
 
 function formatOutput(text) {
-    const lines = text.split('\n');
+    const lines    = text.split('\n');
     const sections = [];
-    let current = null;
+    let current    = null;
 
     for (const line of lines) {
         const match = line.match(/^(#{1,2})\s+(.+)/);
@@ -77,7 +143,30 @@ function formatOutput(text) {
     }).join('');
 }
 
-// --- Typing engine ---
+function isTruncated(text) {
+    if (!text || text.length < 1000) return false;
+    const t = text.trim();
+    return !t.endsWith('}') && !t.endsWith('```') && !t.endsWith('.') && !t.endsWith('!') && !t.endsWith('?');
+}
+
+function renderOutput(text, el) {
+    el.classList.remove('streaming');
+    el.innerHTML = formatOutput(text);
+    if (isTruncated(text)) {
+        el.innerHTML += '<span class="muted">\n\n[Response may be truncated]</span>';
+    }
+    el.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const pre    = btn.nextElementSibling;
+            const hidden = pre.classList.toggle('hidden');
+            btn.textContent = hidden ? 'Show Code' : 'Hide Code';
+        });
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPING ENGINE (node mode only)
+// ─────────────────────────────────────────────────────────────────────────────
 let typingQueue        = '';
 let typingActive       = false;
 let typingAborted      = false;
@@ -90,11 +179,13 @@ function clearTyping() {
     typingQueue        = '';
     charsRendered      = 0;
     typingDoneCallback = null;
-    document.getElementById('output-pre').classList.remove('streaming');
+    outputBody.classList.remove('streaming');
 }
 
-function enqueueText(text) {
-    typingQueue += text;
+function enqueueText(text, onDone) {
+    typingAborted      = false;
+    typingDoneCallback = onDone || null;
+    typingQueue       += text;
     if (!typingActive) processQueue();
 }
 
@@ -109,11 +200,10 @@ function processQueue() {
         return;
     }
     typingActive = true;
-    const pre = document.getElementById('output-pre');
-    if (pre.textContent.length > 15000) {
-        pre.textContent = pre.textContent.slice(-15000);
+    if (outputBody.textContent.length > 15000) {
+        outputBody.textContent = outputBody.textContent.slice(-15000);
     }
-    pre.textContent += typingQueue[0];
+    outputBody.textContent += typingQueue[0];
     typingQueue = typingQueue.slice(1);
     charsRendered++;
     if (charsRendered % 20 === 0) {
@@ -122,68 +212,37 @@ function processQueue() {
     setTimeout(processQueue, 5);
 }
 
-function renderOutput(text, el) {
-    el.classList.remove('streaming');
-    el.innerHTML = formatOutput(text);
-    if (isTruncated(text)) {
-        el.innerHTML += '<span class="muted">\n\n[Warning: Response may be truncated]</span>';
-    }
-}
-
-function isTruncated(text) {
-    if (!text || text.length < 1000) return false;
-    const trimmed = text.trim();
-    return !trimmed.endsWith('}') &&
-           !trimmed.endsWith('```') &&
-           !trimmed.endsWith('.') &&
-           !trimmed.endsWith('!') &&
-           !trimmed.endsWith('?');
-}
-
-function moveStep(id, direction) {
-    const idx = steps.findIndex(s => s.id === id);
-    if (idx === -1) return;
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= steps.length) return;
-    [steps[idx], steps[swapIdx]] = [steps[swapIdx], steps[idx]];
-    renderSteps();
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// STEPS (node mode)
+// ─────────────────────────────────────────────────────────────────────────────
 function renderSteps() {
-    const container = document.getElementById('workflow');
-    container.innerHTML = '';
-
+    stepListEl.innerHTML = '';
     steps.forEach((step, i) => {
-        if (i > 0) {
-            const arrow = document.createElement('span');
-            arrow.className = 'connector';
-            arrow.textContent = '→';
-            container.appendChild(arrow);
-        }
-
         const card = document.createElement('div');
-        const isSelected = selectedStep === step.id;
         card.className = [
             'step-card',
             step.enabled ? '' : 'disabled',
-            step.status,
-            isSelected ? 'selected' : ''
+            step.status !== 'pending' ? step.status : '',
+            selectedStep === step.id ? 'selected' : ''
         ].filter(Boolean).join(' ');
         card.id = `card-${step.id}`;
+
+        const badgeClass = step.enabled ? `badge-${step.status}` : 'badge-off';
+        const badgeText  = step.enabled ? step.status : 'off';
 
         card.innerHTML = `
             <div class="card-top">
                 <span class="step-label">${step.label}</span>
+                <span class="badge ${badgeClass}">${badgeText}</span>
                 <div class="move-btns">
-                    <button class="move-btn" data-move="up" data-id="${step.id}" title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button>
-                    <button class="move-btn" data-move="down" data-id="${step.id}" title="Move down" ${i === steps.length - 1 ? 'disabled' : ''}>▼</button>
+                    <button class="move-btn" data-move="up"   data-id="${step.id}" title="Move up"   ${i === 0 ? 'disabled' : ''}>&#9650;</button>
+                    <button class="move-btn" data-move="down" data-id="${step.id}" title="Move down" ${i === steps.length - 1 ? 'disabled' : ''}>&#9660;</button>
                 </div>
                 <label class="toggle" title="${step.enabled ? 'Disable' : 'Enable'} step">
                     <input type="checkbox" ${step.enabled ? 'checked' : ''} data-id="${step.id}" />
                     <span class="toggle-track"></span>
                 </label>
             </div>
-            <span class="step-badge ${step.status}">${step.enabled ? step.status : 'off'}</span>
         `;
 
         card.addEventListener('click', e => {
@@ -200,42 +259,20 @@ function renderSteps() {
 
         card.querySelector('input[type="checkbox"]').addEventListener('change', e => {
             const target = steps.find(s => s.id === e.target.dataset.id);
-            if (target) {
-                target.enabled = e.target.checked;
-                renderSteps();
-            }
+            if (target) { target.enabled = e.target.checked; renderSteps(); }
         });
 
-        container.appendChild(card);
+        stepListEl.appendChild(card);
     });
 }
 
-function selectStep(id) {
-    clearTyping();
-    selectedStep = id;
+function moveStep(id, direction) {
+    const idx = steps.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= steps.length) return;
+    [steps[idx], steps[swapIdx]] = [steps[swapIdx], steps[idx]];
     renderSteps();
-
-    const step = steps.find(s => s.id === id);
-    const label = document.getElementById('output-label');
-    const pre = document.getElementById('output-pre');
-
-    label.textContent = step ? step.label : '';
-
-    if (!step) return;
-
-    if (!step.enabled) {
-        pre.textContent = 'Step is disabled.';
-        pre.className = 'muted';
-    } else if (step.result) {
-        pre.className = step.status === 'error' ? 'error-text' : '';
-        renderOutput(step.result, pre);
-    } else if (step.status === 'running') {
-        pre.textContent = 'Running...';
-        pre.className = 'muted';
-    } else {
-        pre.textContent = 'No result yet.';
-        pre.className = 'muted';
-    }
 }
 
 function setStepStatus(id, status, result = null) {
@@ -247,23 +284,67 @@ function setStepStatus(id, status, result = null) {
     if (selectedStep === id) selectStep(id);
 }
 
+function selectStep(id) {
+    clearTyping();
+    selectedStep = id;
+    renderSteps();
+
+    const step = steps.find(s => s.id === id);
+    outputSection.hidden = false;
+    outputStepName.textContent = step ? step.label : '';
+    outputBadge.className  = `badge badge-${step?.status || 'pending'}`;
+    outputBadge.textContent = step?.status || 'pending';
+
+    if (!step) return;
+
+    if (!step.enabled) {
+        outputBody.className = 'output-body muted';
+        outputBody.textContent = 'Step is disabled.';
+    } else if (step.result) {
+        outputBody.className = `output-body fade-in${step.status === 'error' ? ' error-text' : ''}`;
+        renderOutput(step.result, outputBody);
+    } else if (step.status === 'running') {
+        outputBody.className = 'output-body muted';
+        outputBody.textContent = 'Running\u2026';
+    } else {
+        outputBody.className = 'output-body muted';
+        outputBody.textContent = 'No result yet.';
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TABS (pipeline mode)
+// ─────────────────────────────────────────────────────────────────────────────
+function setActiveTab(tab) {
+    activeTab = tab;
+    tabBtns.forEach(btn => {
+        const isActive = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `panel-${tab}`);
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SSE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 function parseSSEEvent(rawEvent, handlers) {
     let eventType = 'message';
-    let dataLine = '';
+    let dataLine  = '';
     for (const line of rawEvent.split('\n')) {
         if (line.startsWith('event: ')) eventType = line.slice(7).trim();
         if (line.startsWith('data: '))  dataLine  = line.slice(6).trim();
     }
     if (!dataLine) return;
-    try {
-        handlers[eventType]?.(JSON.parse(dataLine));
-    } catch { /* malformed data — skip */ }
+    try { handlers[eventType]?.(JSON.parse(dataLine)); } catch { /* malformed — skip */ }
 }
 
 async function readSSEStream(response, handlers) {
-    const reader = response.body.getReader();
+    const reader  = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer    = '';
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -276,15 +357,11 @@ async function readSSEStream(response, handlers) {
     }
 }
 
-const STEP_NODE_TYPE = {
-    'generate-feature': 'ai.generate',
-    'debug':            'ai.debug',
-    'refactor':         'ai.refactor',
-    'explain-code':     'ai.explain'
-};
-
+// ─────────────────────────────────────────────────────────────────────────────
+// NODE WORKFLOW
+// ─────────────────────────────────────────────────────────────────────────────
 function buildActiveNodes() {
-    const nodes = [];
+    const nodes       = [];
     const nodeStepMap = {};
     steps
         .filter(s => s.enabled)
@@ -296,45 +373,33 @@ function buildActiveNodes() {
     return { nodes, nodeStepMap };
 }
 
-async function runWorkflowStream() {
-    const input = document.getElementById('task-input').value.trim();
-    const btn = document.getElementById('run-btn');
-    if (!input) { document.getElementById('task-input').focus(); return; }
+async function runNodeWorkflow() {
+    const input = taskInput.value.trim();
+    if (!input) { taskInput.focus(); return; }
 
     const { nodes, nodeStepMap } = buildActiveNodes();
-    const activeStepIds = new Set(Object.values(nodeStepMap));
-
     if (nodes.length === 0) {
-        document.getElementById('output-pre').textContent = 'Enable at least one step to run the workflow.';
-        document.getElementById('output-pre').className = 'muted';
+        showError('Enable at least one step to run the workflow.');
         return;
     }
 
-    btn.disabled = true;
-    showLoading();
+    setLoading(true);
     steps = steps.map(s => ({ ...s, status: 'pending', result: null }));
-    selectedStep = null;
+    selectedStep         = null;
+    outputSection.hidden = true;
     renderSteps();
 
-    const pre = document.getElementById('output-pre');
-    const label = document.getElementById('output-label');
-    label.textContent = '';
-    pre.textContent = 'Running workflow...';
-    pre.className = 'muted';
-
-    // Mark disabled steps as skipped
+    const activeIds = new Set(Object.values(nodeStepMap));
     steps.forEach(s => {
-        if (!activeStepIds.has(s.id)) setStepStatus(s.id, 'done', 'Step not required for this request.');
+        if (!activeIds.has(s.id)) setStepStatus(s.id, 'done', 'Step not required.');
     });
-
-    // Mark active nodes as running
     nodes.forEach(node => setStepStatus(nodeStepMap[node.id], 'running'));
 
     try {
         const response = await fetch(`${API_BASE}/workflow/run`, {
-            method: 'POST',
+            method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nodes, input })
+            body:    JSON.stringify({ nodes, input })
         });
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
         const data = await response.json();
@@ -353,181 +418,152 @@ async function runWorkflowStream() {
         });
 
         if (firstStep) {
-            selectedStep = firstStep;
-            label.textContent = STEP_NAMES[firstStep] || firstStep;
-            pre.className = 'fade-in';
+            const step = steps.find(s => s.id === firstStep);
+            selectedStep           = firstStep;
+            outputSection.hidden   = false;
+            outputStepName.textContent = step.label;
+            outputBadge.className  = 'badge badge-done';
+            outputBadge.textContent = 'done';
+            outputBody.className   = 'output-body streaming';
+            outputBody.textContent = '';
             clearTyping();
-            typingDoneCallback = () => {
-                const step = steps.find(s => s.id === firstStep);
-                if (step?.result) renderOutput(step.result, pre);
-            };
-            enqueueText(steps.find(s => s.id === firstStep)?.result || '');
+            enqueueText(step.result, () => {
+                renderOutput(step.result, outputBody);
+                outputBody.className = 'output-body fade-in';
+            });
             renderSteps();
         }
     } catch (err) {
-        clearTyping();
         console.error('Workflow error:', err);
-        pre.textContent = `Error: ${err.message}`;
-        pre.className = 'error-text';
-    } finally {
-        btn.disabled = false;
-        hideLoading();
-        steps.forEach(step => {
-            if (step.status === 'running') setStepStatus(step.id, 'error', 'Workflow ended unexpectedly');
+        showError(err.message);
+        steps.forEach(s => {
+            if (s.status === 'running') setStepStatus(s.id, 'error', 'Workflow ended unexpectedly');
         });
+    } finally {
+        setLoading(false);
     }
 }
 
-function runWorkflow() {
-    const input = document.getElementById('task-input').value.trim();
-    if (!input) { document.getElementById('task-input').focus(); return; }
-    if (mode === 'pipeline') {
-        runPipeline(input);
+// ─────────────────────────────────────────────────────────────────────────────
+// PIPELINE
+// ─────────────────────────────────────────────────────────────────────────────
+function clearTabPanels() {
+    ['code', 'docs', 'tests', 'validation'].forEach(tab => {
+        document.getElementById(`panel-${tab}`).innerHTML = `<p class="empty-state">Generating\u2026</p>`;
+    });
+}
+
+function renderPipelinePanel(tab, content) {
+    const panel = document.getElementById(`panel-${tab}`);
+    if (content) {
+        panel.innerHTML = formatOutput(content);
+        panel.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const pre    = btn.nextElementSibling;
+                const hidden = pre.classList.toggle('hidden');
+                btn.textContent = hidden ? 'Show Code' : 'Hide Code';
+            });
+        });
     } else {
-        runWorkflowStream();
+        panel.innerHTML = `<p class="empty-state">Not generated.</p>`;
     }
 }
 
-async function runPipeline(input) {
-    const btn = document.getElementById('run-btn');
-    const pre = document.getElementById('output-pre');
-    const label = document.getElementById('output-label');
+function renderValidation(validation) {
+    const panel    = document.getElementById('panel-validation');
+    const allRules = validation ? Object.values(validation).flat() : [];
 
-    btn.disabled = true;
-    showLoading();
-    label.textContent = 'AI Pipeline';
-    pre.className = 'muted';
-    pre.textContent = 'Generating outputs...';
-
-    try {
-        const res = await fetch(`${API_BASE}/workflow/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                data: { description: input },
-                rules: ['no console logs', 'use async/await']
-            })
-        });
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const result = await res.json();
-        renderPipelineResult(result);
-    } catch (err) {
-        console.error('Pipeline error:', err);
-        pre.textContent = `Error: ${err.message}`;
-        pre.className = 'error-text';
-    } finally {
-        btn.disabled = false;
-        hideLoading();
-    }
-}
-
-function renderPipelineResult(result) {
-    const pre = document.getElementById('output-pre');
-    const label = document.getElementById('output-label');
-
-    if (!result.success) {
-        pre.textContent = `Error: ${result.error || 'Pipeline failed'}`;
-        pre.className = 'error-text';
+    if (allRules.length === 0) {
+        panel.innerHTML = `<p class="empty-state">No validation rules defined.</p>`;
         return;
     }
 
-    label.textContent = 'AI Pipeline';
-    pre.className = 'fade-in';
-    pre.innerHTML = '';
+    const passed = allRules.filter(r => r.status === 'PASS').length;
+    const total  = allRules.length;
+    const pct    = Math.round((passed / total) * 100);
 
+    const listItems = allRules.map(r => {
+        const pass = r.status === 'PASS';
+        return `
+            <li class="validation-item">
+                <span class="validation-icon ${pass ? 'pass' : 'fail'}">${pass ? '&#10003;' : '&#10007;'}</span>
+                <span class="validation-rule">${escapeHtml(r.rule)}</span>
+            </li>`;
+    }).join('');
+
+    panel.innerHTML = `
+        <div class="validation-progress">
+            <div class="validation-progress-label">
+                <span>${passed} of ${total} rules passed</span>
+                <span>${pct}%</span>
+            </div>
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill" style="width: ${pct}%"></div>
+            </div>
+        </div>
+        <ul class="validation-list">${listItems}</ul>`;
+}
+
+function renderPipelineResult(result) {
     const { outputs = {}, validation } = result;
-    renderBlock('Code', outputs.code, pre);
-    renderBlock('Docs', outputs.docs, pre);
-    renderBlock('Tests', outputs.tests, pre);
+    renderPipelinePanel('code',  outputs.code);
+    renderPipelinePanel('docs',  outputs.docs);
+    renderPipelinePanel('tests', outputs.tests);
+    renderValidation(validation);
+    setActiveTab('code');
+}
 
-    if (validation && Object.keys(validation).length > 0) {
-        renderValidation(validation, pre);
+async function runPipeline() {
+    const input = taskInput.value.trim();
+    if (!input) { taskInput.focus(); return; }
+
+    setLoading(true);
+    clearTabPanels();
+    setActiveTab('code');
+
+    try {
+        const res = await fetch(`${API_BASE}/workflow/generate`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ data: { description: input }, rules: PIPELINE_RULES })
+        });
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const result = await res.json();
+        if (!result.success) throw new Error(result.error || 'Pipeline failed');
+        renderPipelineResult(result);
+    } catch (err) {
+        console.error('Pipeline error:', err);
+        showError(err.message);
+        ['code', 'docs', 'tests', 'validation'].forEach(tab => {
+            document.getElementById(`panel-${tab}`).innerHTML =
+                `<p class="error-text">Error: ${escapeHtml(err.message)}</p>`;
+        });
+    } finally {
+        setLoading(false);
     }
 }
 
-function renderBlock(title, content, container) {
-    const section = document.createElement('div');
-    section.className = 'output-section';
-
-    const heading = document.createElement('h3');
-    heading.textContent = title;
-    section.appendChild(heading);
-
-    const inner = document.createElement('div');
-    if (content) {
-        inner.innerHTML = formatOutput(content);
-    } else {
-        inner.className = 'muted';
-        inner.textContent = 'No output';
-    }
-    section.appendChild(inner);
-    container.appendChild(section);
+// ─────────────────────────────────────────────────────────────────────────────
+// RUN ENTRY POINT
+// ─────────────────────────────────────────────────────────────────────────────
+function runWorkflow() {
+    if (isRunning) return;
+    mode === 'pipeline' ? runPipeline() : runNodeWorkflow();
 }
 
-function renderValidation(validation, container) {
-    const section = document.createElement('div');
-    section.className = 'output-section';
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
+btnNode.addEventListener('click',     () => setMode('node'));
+btnPipeline.addEventListener('click', () => setMode('pipeline'));
+runBtn.addEventListener('click',      runWorkflow);
+taskInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runWorkflow();
+});
+tabBtns.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
 
-    const heading = document.createElement('h3');
-    heading.textContent = 'Validation';
-    section.appendChild(heading);
-
-    for (const key of Object.keys(validation)) {
-        const rules = validation[key];
-        const block = document.createElement('div');
-        block.style.marginTop = '0.5rem';
-
-        const keyLabel = document.createElement('strong');
-        keyLabel.style.color = '#a78bfa';
-        keyLabel.textContent = key.toUpperCase();
-        block.appendChild(keyLabel);
-
-        for (const r of rules) {
-            const line = document.createElement('div');
-            line.style.fontSize = '0.8rem';
-            line.style.padding = '2px 0';
-            const pass = r.status === 'PASS';
-            const marker = document.createElement('span');
-            marker.style.color = pass ? '#86efac' : '#fca5a5';
-            marker.textContent = pass ? '✓ ' : '✗ ';
-            line.appendChild(marker);
-            line.appendChild(document.createTextNode(r.rule));
-            if (r.reason) {
-                const reason = document.createElement('span');
-                reason.style.color = '#94a3b8';
-                reason.textContent = ` — ${r.reason}`;
-                line.appendChild(reason);
-            }
-            block.appendChild(line);
-        }
-
-        section.appendChild(block);
-    }
-
-    container.appendChild(section);
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
 renderSteps();
-
-document.getElementById('mode-node').addEventListener('click', () => {
-    mode = 'node';
-    document.getElementById('mode-node').classList.add('active');
-    document.getElementById('mode-pipeline').classList.remove('active');
-});
-
-document.getElementById('mode-pipeline').addEventListener('click', () => {
-    mode = 'pipeline';
-    document.getElementById('mode-pipeline').classList.add('active');
-    document.getElementById('mode-node').classList.remove('active');
-});
-
-document.getElementById('output-pre').addEventListener('click', e => {
-    const btn = e.target.closest('.toggle-btn');
-    if (!btn) return;
-    const pre = btn.nextElementSibling;
-    const nowHidden = pre.classList.toggle('hidden');
-    btn.textContent = nowHidden ? 'Show Code' : 'Hide Code';
-});
-
-// Dev helper — paste into browser console to verify output panel isn't clipping:
-// document.getElementById('output-pre').textContent = 'TEST\n'.repeat(200);
+setMode('node');
