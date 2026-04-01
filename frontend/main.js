@@ -541,7 +541,27 @@ async function runPipeline() {
     }
 }
 
-// Bootstrap
+// ─────────────────────────────────────────────────────────────────────────────
+// RUN ENTRY POINT
+// ─────────────────────────────────────────────────────────────────────────────
+function runWorkflow() {
+    if (isRunning) return;
+    mode === 'pipeline' ? runPipeline() : runNodeWorkflow();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
+btnNode.addEventListener('click',     () => setMode('node'));
+btnPipeline.addEventListener('click', () => setMode('pipeline'));
+runBtn.addEventListener('click',      runWorkflow);
+taskInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runWorkflow();
+});
+tabBtns.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────────────────
 renderSteps();
 setMode('node');
-tabBtns.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
