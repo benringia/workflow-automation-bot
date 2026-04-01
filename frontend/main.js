@@ -325,6 +325,123 @@ function setActiveTab(tab) {
     });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SSE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function parseSSEEvent(rawEvent, handlers) {
+    let eventType = 'message';
+    let dataLine  = '';
+    for (const line of rawEvent.split('\n')) {
+        if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+        if (line.startsWith('data: '))  dataLine  = line.slice(6).trim();
+    }
+    if (!dataLine) return;
+    try { handlers[eventType]?.(JSON.parse(dataLine)); } catch { /* malformed — skip */ }
+}
+
+async function readSSEStream(response, handlers) {
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer    = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+            parseSSEEvent(buffer.slice(0, boundary), handlers);
+            buffer = buffer.slice(boundary + 2);
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NODE WORKFLOW
+// ─────────────────────────────────────────────────────────────────────────────
+function buildActiveNodes() {
+    const nodes       = [];
+    const nodeStepMap = {};
+    steps
+        .filter(s => s.enabled)
+        .forEach((s, i) => {
+            const id = String(i + 1);
+            nodes.push({ id, type: STEP_NODE_TYPE[s.id] });
+            nodeStepMap[id] = s.id;
+        });
+    return { nodes, nodeStepMap };
+}
+
+async function runNodeWorkflow() {
+    const input = taskInput.value.trim();
+    if (!input) { taskInput.focus(); return; }
+
+    const { nodes, nodeStepMap } = buildActiveNodes();
+    if (nodes.length === 0) {
+        showError('Enable at least one step to run the workflow.');
+        return;
+    }
+
+    setLoading(true);
+    steps = steps.map(s => ({ ...s, status: 'pending', result: null }));
+    selectedStep         = null;
+    outputSection.hidden = true;
+    renderSteps();
+
+    const activeIds = new Set(Object.values(nodeStepMap));
+    steps.forEach(s => {
+        if (!activeIds.has(s.id)) setStepStatus(s.id, 'done', 'Step not required.');
+    });
+    nodes.forEach(node => setStepStatus(nodeStepMap[node.id], 'running'));
+
+    try {
+        const response = await fetch(`${API_BASE}/workflow/run`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ nodes, input })
+        });
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Workflow failed');
+
+        let firstStep = null;
+        nodes.forEach(node => {
+            const stepId = nodeStepMap[node.id];
+            const result = data.results?.[node.id];
+            if (result?.output) {
+                setStepStatus(stepId, 'done', result.output);
+                if (!firstStep) firstStep = stepId;
+            } else {
+                setStepStatus(stepId, 'error', result?.error || 'No output');
+            }
+        });
+
+        if (firstStep) {
+            const step = steps.find(s => s.id === firstStep);
+            selectedStep           = firstStep;
+            outputSection.hidden   = false;
+            outputStepName.textContent = step.label;
+            outputBadge.className  = 'badge badge-done';
+            outputBadge.textContent = 'done';
+            outputBody.className   = 'output-body streaming';
+            outputBody.textContent = '';
+            clearTyping();
+            enqueueText(step.result, () => {
+                renderOutput(step.result, outputBody);
+                outputBody.className = 'output-body fade-in';
+            });
+            renderSteps();
+        }
+    } catch (err) {
+        console.error('Workflow error:', err);
+        showError(err.message);
+        steps.forEach(s => {
+            if (s.status === 'running') setStepStatus(s.id, 'error', 'Workflow ended unexpectedly');
+        });
+    } finally {
+        setLoading(false);
+    }
+}
+
 // Bootstrap
 renderSteps();
 setMode('node');
